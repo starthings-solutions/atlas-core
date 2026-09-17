@@ -290,9 +290,15 @@ test(
       open(url, 3000);
       assert.equal(geometry().drawerOpen, false, "desktop disclosure state is not persisted");
     } finally {
-      run(process.execPath, ["bin/lavish-axi.js", "stop", "--port", String(port)], lavishEnv, 15_000);
-      driver.stop();
-      await rm(temp, { recursive: true, force: true });
+      try {
+        run(process.execPath, ["bin/lavish-axi.js", "stop", "--port", String(port)], lavishEnv, 15_000);
+      } finally {
+        try {
+          driver.stop();
+        } finally {
+          await rm(temp, { recursive: true, force: true });
+        }
+      }
     }
   },
 );
