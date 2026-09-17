@@ -142,13 +142,13 @@ A tinta primária da aplicação passa a `#F8F4EB`, com contraste de `19.13:1` s
 
 Esta paleta pertence ao chrome e a controles de aplicação:
 
-| Papel | Valor | Uso |
-|---|---:|---|
-| tinta quente | `#F8F4EB` | texto principal, inversão, foco neutro |
-| feedback humano | `#FFB386` | comentários, autoria humana, revisão |
-| risco | `#F87171` | erro, destrutivo, falha |
-| pendência | `#F2C14E` | fila, processamento pendente, atenção |
-| atividade | `#6FC7C2` | foco, seleção, presença e sucesso operacional |
+| Papel           |     Valor | Uso                                           |
+| --------------- | --------: | --------------------------------------------- |
+| tinta quente    | `#F8F4EB` | texto principal, inversão, foco neutro        |
+| feedback humano | `#FFB386` | comentários, autoria humana, revisão          |
+| risco           | `#F87171` | erro, destrutivo, falha                       |
+| pendência       | `#F2C14E` | fila, processamento pendente, atenção         |
+| atividade       | `#6FC7C2` | foco, seleção, presença e sucesso operacional |
 
 Sobre preto, os contrastes são respectivamente `19.13`, `12.04`, `7.59`, `12.51` e `10.62`. Texto claro não deve ser colocado em preenchimentos dessas cores; componentes preenchidos usam texto `#000000`.
 

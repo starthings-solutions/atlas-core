@@ -189,10 +189,22 @@
 
   ```js
   const chromeFonts = [
-    ["node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2", "archivo-latin-wdth-normal.woff2"],
-    ["node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2", "ibm-plex-mono-latin-400-normal.woff2"],
-    ["node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2", "ibm-plex-mono-latin-500-normal.woff2"],
-    ["node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2", "ibm-plex-mono-latin-600-normal.woff2"],
+    [
+      "node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2",
+      "archivo-latin-wdth-normal.woff2",
+    ],
+    [
+      "node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2",
+      "ibm-plex-mono-latin-400-normal.woff2",
+    ],
+    [
+      "node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2",
+      "ibm-plex-mono-latin-500-normal.woff2",
+    ],
+    [
+      "node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2",
+      "ibm-plex-mono-latin-600-normal.woff2",
+    ],
   ];
   await mkdir("dist/chrome-fonts", { recursive: true });
   for (const [source, name] of chromeFonts) await copyFile(source, `dist/chrome-fonts/${name}`);
@@ -206,19 +218,31 @@
   const chromeFontAssetUrls = {
     "archivo-latin-wdth-normal.woff2": {
       packaged: new URL("./chrome-fonts/archivo-latin-wdth-normal.woff2", import.meta.url),
-      source: new URL("../node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2", import.meta.url),
+      source: new URL(
+        "../node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2",
+        import.meta.url,
+      ),
     },
     "ibm-plex-mono-latin-400-normal.woff2": {
       packaged: new URL("./chrome-fonts/ibm-plex-mono-latin-400-normal.woff2", import.meta.url),
-      source: new URL("../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2", import.meta.url),
+      source: new URL(
+        "../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2",
+        import.meta.url,
+      ),
     },
     "ibm-plex-mono-latin-500-normal.woff2": {
       packaged: new URL("./chrome-fonts/ibm-plex-mono-latin-500-normal.woff2", import.meta.url),
-      source: new URL("../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2", import.meta.url),
+      source: new URL(
+        "../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2",
+        import.meta.url,
+      ),
     },
     "ibm-plex-mono-latin-600-normal.woff2": {
       packaged: new URL("./chrome-fonts/ibm-plex-mono-latin-600-normal.woff2", import.meta.url),
-      source: new URL("../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2", import.meta.url),
+      source: new URL(
+        "../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2",
+        import.meta.url,
+      ),
     },
   };
 
@@ -425,7 +449,11 @@
   test("the mobile toggle stops the following head click from toggling twice", async () => {
     const chrome = await createChromeHarness({ mobile: true });
     let stopped = false;
-    chrome.element("panelToggle").click({ stopPropagation() { stopped = true; } });
+    chrome.element("panelToggle").click({
+      stopPropagation() {
+        stopped = true;
+      },
+    });
     if (!stopped) chrome.element("panelHead").dispatch("click", {});
     assert.equal(stopped, true);
     assert.equal(conversationState(chrome).sheetOpen, true);
@@ -505,9 +533,7 @@
 
   function conversationContainsFocus() {
     const activeElement = document.activeElement;
-    return Boolean(
-      activeElement && (panelScroll.contains(activeElement) || chatComposer.contains(activeElement)),
-    );
+    return Boolean(activeElement && (panelScroll.contains(activeElement) || chatComposer.contains(activeElement)));
   }
 
   function setSheetOpen(open, { restoreFocus = false } = {}) {
@@ -558,7 +584,12 @@
   ```js
   function conversationSummary() {
     if (ended) return { text: "Session ended", short: "×", tone: "risk" };
-    if (queued.length) return { text: queued.length === 1 ? "1 queued" : `${queued.length} queued`, short: String(queued.length), tone: "pending" };
+    if (queued.length)
+      return {
+        text: queued.length === 1 ? "1 queued" : `${queued.length} queued`,
+        short: String(queued.length),
+        tone: "pending",
+      };
     if (unreadAgentReply) return { text: unreadAgentReply, short: "!", tone: "feedback" };
     if (agentPresence === "working") return { text: "Agent is working…", short: "●", tone: "activity" };
     if (agentPresence === "listening") return { text: "Agent listening", short: "●", tone: "activity" };
@@ -685,17 +716,27 @@
         assert.ok(raw, output);
         let value = JSON.parse(raw);
         while (typeof value === "string") {
-          try { value = JSON.parse(value); } catch { break; }
+          try {
+            value = JSON.parse(value);
+          } catch {
+            break;
+          }
         }
         return value;
       },
-      wait(ms) { command(["wait", String(ms)], ms + 45_000); },
-      emulate(viewport) { command(["emulate", "--viewport", viewport]); },
+      wait(ms) {
+        command(["wait", String(ms)], ms + 45_000);
+      },
+      emulate(viewport) {
+        command(["emulate", "--viewport", viewport]);
+      },
       open(url, settleMs = 4_000) {
         command(["open", url]);
         command(["wait", String(settleMs)], settleMs + 45_000);
       },
-      stop() { command(["stop"]); },
+      stop() {
+        command(["stop"]);
+      },
     };
   }
   ```
@@ -885,33 +926,37 @@
 
   const runBrowserE2e = process.env.LAVISH_AXI_BROWSER_E2E === "1";
 
-  test("the chrome uses OLED Sunset Calm without styling the artifact", { skip: !runBrowserE2e, timeout: 300_000 }, async () => {
-    const temp = await mkdtemp(path.join(tmpdir(), "lavish-chrome-theme-"));
-    const port = await freePort();
-    const lavishEnv = {
-      LAVISH_AXI_PORT: String(port),
-      LAVISH_AXI_STATE_DIR: path.join(temp, "state"),
-      LAVISH_AXI_NO_OPEN: "1",
-      LAVISH_AXI_TELEMETRY: "0",
-      LAVISH_AXI_HOST: "127.0.0.1",
-      LAVISH_AXI_LINK_HOST: "127.0.0.1",
-    };
-    const browser = createChromeDriver({ temp, session: `lavish-chrome-theme-${process.pid}` });
-    try {
-      const artifact = path.join(temp, "theme.html");
-      await writeFile(artifact, THEME_ARTIFACT);
-      const output = run(process.execPath, ["bin/lavish-axi.js", artifact, "--no-open"], lavishEnv);
-      const url = output.match(/url:\s*"([^"]+)"/)?.[1];
-      assert.ok(url, output);
-      browser.emulate("1440x1000x1");
-      browser.open(url);
-      const { evaluate, wait, emulate } = browser;
-    } finally {
-      run(process.execPath, ["bin/lavish-axi.js", "stop", "--port", String(port)], lavishEnv, 15_000);
-      browser.stop();
-      await rm(temp, { recursive: true, force: true });
-    }
-  });
+  test(
+    "the chrome uses OLED Sunset Calm without styling the artifact",
+    { skip: !runBrowserE2e, timeout: 300_000 },
+    async () => {
+      const temp = await mkdtemp(path.join(tmpdir(), "lavish-chrome-theme-"));
+      const port = await freePort();
+      const lavishEnv = {
+        LAVISH_AXI_PORT: String(port),
+        LAVISH_AXI_STATE_DIR: path.join(temp, "state"),
+        LAVISH_AXI_NO_OPEN: "1",
+        LAVISH_AXI_TELEMETRY: "0",
+        LAVISH_AXI_HOST: "127.0.0.1",
+        LAVISH_AXI_LINK_HOST: "127.0.0.1",
+      };
+      const browser = createChromeDriver({ temp, session: `lavish-chrome-theme-${process.pid}` });
+      try {
+        const artifact = path.join(temp, "theme.html");
+        await writeFile(artifact, THEME_ARTIFACT);
+        const output = run(process.execPath, ["bin/lavish-axi.js", artifact, "--no-open"], lavishEnv);
+        const url = output.match(/url:\s*"([^"]+)"/)?.[1];
+        assert.ok(url, output);
+        browser.emulate("1440x1000x1");
+        browser.open(url);
+        const { evaluate, wait, emulate } = browser;
+      } finally {
+        run(process.execPath, ["bin/lavish-axi.js", "stop", "--port", String(port)], lavishEnv, 15_000);
+        browser.stop();
+        await rm(temp, { recursive: true, force: true });
+      }
+    },
+  );
   ```
 
   Dentro do `try`, imediatamente após `browser.open(url)`, acrescentar em ordem os blocos de listener, medição e tons especificados abaixo.
@@ -1125,7 +1170,6 @@
 - [ ] **Step 4: Mapear estados por semântica, não por substituição global**
 
   Aplicar:
-
   - `--app-activity`: foco, ação primária, modo de anotação, seleção, presença, sucesso operacional, anexar/copiar concluído;
   - `--app-pending`: fila, envio/processamento, aviso não destrutivo, hint persistente;
   - `--app-feedback`: bolha humana, comentário, autoria e indicador unread;
@@ -1220,7 +1264,6 @@
 - [ ] **Step 3: Atualizar a teoria e os gates nos dois Markdown**
 
   Em `ESTILO-OLED-DARK.md` e `OLED-BASE-CONCEITO.md`, registrar:
-
   - dois namespaces e dois propósitos: semântico de aplicação versus categórico de dados;
   - contrastes sobre `#000` e `#080808`;
   - OKLCH: `0.968 0.013 86.8`, `0.829 0.107 51.4`, `0.711 0.166 22.2`, `0.834 0.141 85.4`, `0.773 0.086 190.8`;
@@ -1233,7 +1276,6 @@
 - [ ] **Step 4: Migrar somente o `@layer app` da base CSS**
 
   Em `oled-base.css`, manter primitivos, gráficos e diagramas em `--ink`/`--c*`. Dentro de `@layer app`:
-
   - foco, nav current, seleção, presença e done → `--app-activity`;
   - fila, pending, running e atenção → `--app-pending`;
   - comentários, review e autoria → `--app-feedback`;
@@ -1245,7 +1287,6 @@
 - [ ] **Step 5: Atualizar a referência HTML como prova das duas camadas**
 
   Em `oled-base-referencia.html`:
-
   - mostrar uma seção “Paleta semântica da aplicação” e outra “Paleta categórica de dados”;
   - aplicar Sunset Calm aos controles e estados de aplicação;
   - manter os exemplos de gráficos com `--c1..--c5`;
@@ -1257,14 +1298,13 @@
 - [ ] **Step 6: Sincronizar as cópias integrais e a folha viva**
 
   A fonte da verdade é `oled-base.css`. Sincronizar mecanicamente, preservando escaping HTML:
-
   1. apêndice CSS de `OLED-BASE-CONCEITO.md`;
   2. `<pre id="css-src">` de `oled-base-referencia.html`;
   3. folha curta no `<style>` da própria referência, somente nos tokens/seletores que a página realmente usa.
 
   Usar `apply_patch` para as mudanças semânticas no CSS canônico, nos textos e na folha curta. Depois executar esta transformação mecânica apenas para as duas cópias integrais:
 
-  ```bash
+  ````bash
   node --input-type=module <<'NODE'
   import assert from "node:assert/strict";
   import { readFile, writeFile } from "node:fs/promises";
@@ -1297,7 +1337,7 @@
   const nextHtml = html.replace(htmlPattern, (_match, openTag, closeTag) => `${openTag}${escaped}${closeTag}`);
   await writeFile(htmlPath, nextHtml);
   NODE
-  ```
+  ````
 
   Esta escrita é exclusivamente uma sincronização mecânica de blocos duplicados; revisar o diff imediatamente depois.
 
@@ -1305,7 +1345,7 @@
 
   Rodar este script Node somente-leitura a partir de `/home/dev/@development/lavish-axi`; ele compara as duas cópias integrais com `oled-base.css` e valida a folha viva:
 
-  ```bash
+  ````bash
   node --input-type=module <<'NODE'
   import assert from "node:assert/strict";
   import { readFile } from "node:fs/promises";
@@ -1360,10 +1400,9 @@
   assert.match(html, /APP_PALETTE/);
   console.log("OLED design-concept sync: PASS");
   NODE
-  ```
+  ````
 
   A validação deve falhar se:
-
   - algum dos cinco `--app-*` faltar;
   - algum valor `--c1..--c5` mudar;
   - `@layer app` usar `var(--c[1-5])`;
@@ -1403,7 +1442,6 @@
   ```
 
   O bloco print é validado estruturalmente pelo script anterior; a ferramenta de browser não expõe emulação `print`. Conferir nas capturas e snapshot:
-
   - zero overflow horizontal;
   - foco visível por teclado;
   - controles usando Sunset Calm;
@@ -1433,7 +1471,6 @@
 - [ ] **Step 1: Atualizar README com comportamento observável**
 
   Documentar que:
-
   - esta árvore deriva de `kunchenguid/lavish-axi` e mantém licença MIT/atribuições;
   - desktop reserva um trilho de `48px`, inicia fechado e abre conversa sobre o artefato;
   - abrir/fechar não redimensiona o artefato;
@@ -1445,7 +1482,6 @@
 - [ ] **Step 2: Atualizar o invariante de manutenção em AGENTS.md**
 
   Substituir o invariante “desktop pixel-identical side-by-side” por dois contratos verificáveis:
-
   1. desktop grid reserva `48px`, drawer de `360px` cresce para a esquerda e iframe não muda;
   2. abaixo de `860px`, o bottom sheet e todas as suas invariantes atuais continuam intactos.
 
@@ -1504,7 +1540,6 @@
 - [ ] **Step 3: Exercitar um artefato Mermaid/whiteboard real**
 
   Criar fixture temporário fora do repositório com HTML, uma `.mermaid`, texto anotável e tabela. Abrir com o CLI desta worktree e comprovar no navegador:
-
   - diagrama renderiza com a mesma qualidade;
   - clique desbloqueia o whiteboard;
   - fullscreen abre/fecha;
@@ -1517,7 +1552,6 @@
 - [ ] **Step 4: Capturar os estados de QA visual**
 
   Com `chrome-devtools-axi`, capturar e inspecionar:
-
   - desktop `1440x1000` fechado;
   - desktop `1440x1000` aberto;
   - mobile `390x844` docked e aberto;
@@ -1559,7 +1593,6 @@
 - [ ] **Step 8: Revisar o diff contra a spec**
 
   Ler todo o diff e responder explicitamente:
-
   - Algum CSS atravessa o iframe? Deve ser não.
   - Algum protocolo/nome/storage foi renomeado? Deve ser não.
   - Desktop sempre inicia fechado? Deve ser sim.
@@ -1580,7 +1613,6 @@
 - [ ] **Step 10: Preparar handoff sem publicar**
 
   Entregar ao usuário:
-
   - caminho da worktree e branch;
   - resumo de arquivos alterados;
   - comandos e resultados dos gates;
