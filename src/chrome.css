@@ -127,6 +127,7 @@
   --shadow-floating: 0 20px 70px rgba(0, 0, 0, 0.35);
   --bar-h: 56px;
   --bar-pad: var(--space-8);
+  --rail-w: 48px;
   --panel-w: 360px;
   --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
   --dur-fast: 120ms;
@@ -922,10 +923,11 @@ body.lavish {
   border-color: var(--border-strong);
 }
 .layout {
+  position: relative;
   height: calc(100vh - var(--bar-h));
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--panel-w);
+  grid-template-columns: minmax(0, 1fr) var(--rail-w);
 }
 .frame {
   min-width: 0;
@@ -953,6 +955,80 @@ body.lavish {
 .panel-toggle,
 .panel-scrim {
   display: none;
+}
+@media (min-width: 861px) {
+  .panel {
+    position: absolute;
+    z-index: 30;
+    inset: 0 0 0 auto;
+    width: var(--rail-w);
+    overflow: hidden;
+    transition: width var(--dur) var(--ease);
+  }
+  body.drawer-open .panel {
+    width: min(var(--panel-w), calc(100vw - var(--rail-w)));
+  }
+  .panel-head,
+  .panel-head-row {
+    display: flex;
+  }
+  .panel-head {
+    position: relative;
+    align-self: flex-end;
+    width: var(--panel-w);
+    min-width: var(--panel-w);
+  }
+  .panel-head-row {
+    position: relative;
+    align-items: center;
+    width: 100%;
+    min-height: var(--rail-w);
+    padding-right: var(--rail-w);
+  }
+  .panel-toggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: grid;
+    width: var(--rail-w);
+    height: var(--rail-w);
+    place-items: center;
+  }
+  body:not(.drawer-open) .panel h2 {
+    visibility: hidden;
+  }
+  body:not(.drawer-open) .panel-summary {
+    position: absolute;
+    top: var(--rail-w);
+    right: 0;
+    display: grid;
+    width: var(--rail-w);
+    height: var(--rail-w);
+    place-items: center;
+    overflow: hidden;
+    font-size: 0;
+  }
+  body:not(.drawer-open) .panel-summary::before {
+    content: attr(data-short);
+    font: 600 var(--text-sm) / 1 var(--font-mono);
+  }
+  body.drawer-open .panel-summary {
+    display: block;
+  }
+  .panel-scroll,
+  .composer {
+    width: var(--panel-w);
+    min-width: var(--panel-w);
+    align-self: flex-end;
+    visibility: hidden;
+  }
+  body.drawer-open .panel-scroll,
+  body.drawer-open .composer {
+    visibility: visible;
+  }
+  .panel-scrim {
+    display: none;
+  }
 }
 .panel h2 {
   font-size: 15px;
@@ -1513,7 +1589,7 @@ body.layout-gate-active iframe#artifact {
   }
   .frame {
     padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
-    background: var(--bg-bar);
+    background: #fff;
   }
   .panel {
     position: fixed;
