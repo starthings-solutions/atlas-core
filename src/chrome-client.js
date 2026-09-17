@@ -618,7 +618,7 @@ function render() {
   }
   updateSendState();
   scrollPanelToBottom();
-  renderSheetSummary();
+  renderConversationSummary();
 }
 
 function updateSendState() {
@@ -980,7 +980,7 @@ function syncChat(chat, revision) {
 function setAgentPresence(state) {
   agentPresence = state === "listening" || state === "working" ? state : "waiting";
   updateSendState();
-  renderSheetSummary();
+  renderConversationSummary();
   if (presenceBanner) presenceBanner.hidden = ended || agentPresence !== "waiting";
 
   if (agentPresence !== "working") {
@@ -1136,6 +1136,9 @@ const sheetMedia = typeof window.matchMedia === "function" ? window.matchMedia(M
 // The user's intent, kept across a chrome reload so a live-reload or server upgrade does not drop
 // them back onto a closed dock mid-conversation.
 let sheetOpen = readSheetOpen();
+// Desktop disclosure is intentionally ephemeral: every chrome load starts with the drawer
+// collapsed, while mobile keeps its existing per-session sheet intent.
+let desktopDrawerOpen = false;
 // The latest agent reply that landed while the sheet was closed: the dock previews it until the
 // user opens the sheet, so a reply never arrives silently behind the artifact.
 let unreadAgentReply = "";
@@ -1155,7 +1158,16 @@ function isMobileSheet() {
   return Boolean(sheetMedia && sheetMedia.matches);
 }
 
-function setSheetOpen(open) {
+function isConversationOpen() {
+  return isMobileSheet() ? sheetOpen : desktopDrawerOpen;
+}
+
+function conversationContainsFocus() {
+  const activeElement = document.activeElement;
+  return Boolean(activeElement && (panelScroll.contains(activeElement) || chatComposer.contains(activeElement)));
+}
+
+function setSheetOpen(open, { restoreFocus = false } = {}) {
   const next = Boolean(open);
   const changed = next !== sheetOpen;
   sheetOpen = next;
@@ -1166,54 +1178,67 @@ function setSheetOpen(open) {
     // Storage refused is not worth a broken sheet: the state just stops surviving a reload.
   }
   if (sheetOpen) unreadAgentReply = "";
-  applySheetState();
-  if (!changed || !isMobileSheet()) return;
-  if (sheetOpen) scrollPanelToBottom();
+  applyConversationState();
+  if (changed && sheetOpen) scrollPanelToBottom();
+  if (changed && !sheetOpen && restoreFocus) panelToggle.focus();
 }
 
-// Re-derives every sheet attribute from the phone layout, sheet-open, and session-ended state so a
-// viewport crossing the breakpoint in either direction cannot make an ended panel interactive or
-// leave a closed dock trapping focus.
-function applySheetState() {
-  const mobile = isMobileSheet();
-  const open = mobile && sheetOpen;
-  document.body.classList.toggle("sheet-open", open);
-  const docked = mobile && !open;
-  panelScroll.inert = ended || docked;
-  chatComposer.inert = ended || docked;
-  const activeElement = document.activeElement;
-  if (docked && activeElement && (panelScroll.contains(activeElement) || chatComposer.contains(activeElement))) {
+function setDesktopDrawerOpen(open, { restoreFocus = false } = {}) {
+  desktopDrawerOpen = Boolean(open);
+  if (desktopDrawerOpen) unreadAgentReply = "";
+  applyConversationState();
+  if (desktopDrawerOpen) {
+    scrollPanelToBottom();
+    chatInput.focus();
+  } else if (restoreFocus) {
     panelToggle.focus();
   }
+}
+
+// Re-derives every disclosure attribute from the active layout, its current disclosure state, and
+// session-ended state so a viewport crossing cannot leave hidden conversation content interactive.
+function applyConversationState() {
+  const mobile = isMobileSheet();
+  const open = mobile ? sheetOpen : desktopDrawerOpen;
+  document.body.classList.toggle("sheet-open", mobile && open);
+  document.body.classList.toggle("drawer-open", !mobile && open);
+  panelScroll.inert = ended || !open;
+  chatComposer.inert = ended || !open;
+  if (!open && conversationContainsFocus()) panelToggle.focus();
   panelToggle.setAttribute("aria-expanded", open ? "true" : "false");
   panelToggle.setAttribute("aria-label", open ? "Hide conversation" : "Show conversation");
-  renderSheetSummary();
+  renderConversationSummary();
 }
 
-// What the closed dock says. One line, most actionable state first: work the user has queued,
-// then a reply they have not seen, then whether the agent is there to receive a send.
-function sheetSummary() {
-  if (ended) return { text: "Session ended", accent: false, unread: false };
+// What a closed conversation disclosure says. One line, most actionable state first: work the
+// user has queued, then a reply they have not seen, then whether the agent is there to receive a send.
+function conversationSummary() {
+  if (ended) return { text: "Session ended", short: "×", tone: "risk" };
   if (queued.length > 0) {
-    return { text: queued.length === 1 ? "1 queued" : queued.length + " queued", accent: true, unread: false };
+    return {
+      text: queued.length === 1 ? "1 queued" : queued.length + " queued",
+      short: String(queued.length),
+      tone: "pending",
+    };
   }
-  if (unreadAgentReply) return { text: unreadAgentReply, accent: false, unread: true };
-  if (agentPresence === "working") return { text: "Agent is working…", accent: false, unread: false };
-  if (agentPresence === "listening") return { text: "Agent listening", accent: false, unread: false };
-  return { text: "Agent not listening", accent: false, unread: false };
+  if (unreadAgentReply) return { text: unreadAgentReply, short: "!", tone: "feedback" };
+  if (agentPresence === "working") return { text: "Agent is working…", short: "●", tone: "activity" };
+  if (agentPresence === "listening") return { text: "Agent listening", short: "●", tone: "activity" };
+  return { text: "Agent not listening", short: "○", tone: "neutral" };
 }
 
-function renderSheetSummary() {
-  const summary = sheetSummary();
+function renderConversationSummary() {
+  const summary = conversationSummary();
   panelSummary.textContent = summary.text;
-  panelSummary.classList.toggle("is-accent", summary.accent);
-  panelSummary.classList.toggle("is-unread", summary.unread);
+  panelSummary.dataset.short = summary.short;
+  panelSummary.dataset.tone = summary.tone;
+  for (const tone of ["pending", "feedback", "risk", "activity"])
+    panelSummary.classList.toggle(`is-${tone}`, summary.tone === tone);
 }
 
-// A brief pulse on the dock when something the user should notice lands while the sheet is
-// closed: a prompt they queued from the artifact, or an agent reply.
-function pulseSheetDock() {
-  if (!isMobileSheet() || sheetOpen) return;
+// A brief pulse on the closed conversation control when a prompt or reply needs attention.
+function pulseConversationDock() {
+  if (isConversationOpen()) return;
   panelHead.classList.remove("is-fresh");
   // Restart the animation even when the previous pulse is still running.
   void panelHead.offsetWidth;
@@ -1221,10 +1246,10 @@ function pulseSheetDock() {
 }
 
 function noteAgentReply(text) {
-  if (!isMobileSheet() || sheetOpen) return;
+  if (isConversationOpen()) return;
   unreadAgentReply = String(text || "");
-  renderSheetSummary();
-  pulseSheetDock();
+  renderConversationSummary();
+  pulseConversationDock();
 }
 
 // The phone keyboard shrinks the visual viewport without touching the layout viewport on iOS, so
@@ -1273,6 +1298,11 @@ panelHead.addEventListener("click", () => {
   setSheetOpen(!sheetOpen);
 });
 panelScrim.addEventListener("click", () => setSheetOpen(false));
+panelToggle.addEventListener("click", (event) => {
+  event.stopPropagation?.();
+  if (isMobileSheet()) setSheetOpen(!sheetOpen);
+  else setDesktopDrawerOpen(!desktopDrawerOpen, { restoreFocus: desktopDrawerOpen });
+});
 panelHead.addEventListener("pointerdown", (event) => {
   if (!isMobileSheet() || event.button) return;
   sheetDrag = { pointerId: event.pointerId, startY: Number(event.clientY), moved: false };
@@ -1304,8 +1334,10 @@ if (sheetMedia && typeof sheetMedia.addEventListener === "function") {
       } catch {
         // Storage refusal only prevents persistence; the in-memory state is already reset.
       }
+    } else {
+      desktopDrawerOpen = false;
     }
-    applySheetState();
+    applyConversationState();
   });
 }
 if (window.visualViewport && typeof window.visualViewport.addEventListener === "function") {
@@ -2522,7 +2554,7 @@ function markSessionEnded() {
   moreButton.disabled = true;
   chatInput.disabled = true;
   updateSendState();
-  applySheetState();
+  applyConversationState();
   if (presenceBanner) presenceBanner.hidden = true;
   if (handoffBanner) handoffBanner.hidden = true;
   if (outdatedBanner) outdatedBanner.hidden = true;
@@ -3325,7 +3357,7 @@ async function queueWhiteboardFeedback(index, message, mode) {
     )
       throw new Error("failed to retain whiteboard feedback");
     // Queued from the whiteboard inside the artifact, like any other in-artifact prompt.
-    pulseSheetDock();
+    pulseConversationDock();
     postToWhiteboard(index, mode, { type: "lavish-whiteboard:queueResult", ok: true });
     if (mode === "overlay") closeWhiteboard();
     clearPreparationFailure("whiteboard");
@@ -3649,7 +3681,7 @@ window.addEventListener("message", (event) => {
   if (msg.type === "lavish:queuePrompt") {
     enqueuePrompt(msg.prompt);
     // Queued from inside the artifact, where the closed dock is the only sign it landed.
-    pulseSheetDock();
+    pulseConversationDock();
   }
   if (msg.type === "lavish:snapshot") {
     completeSnapshotRequest(msg.snapshot_request_id, msg.snapshot || "");
@@ -3958,8 +3990,12 @@ document.addEventListener("keydown", (event) => {
       closeWarningsDrawer({ restoreFocus: true });
     } else if (!moreMenu.hidden) {
       closeMenus();
-    } else if (sheetOpen && isMobileSheet()) {
-      setSheetOpen(false);
+    } else if (isMobileSheet() && sheetOpen) {
+      event.preventDefault();
+      setSheetOpen(false, { restoreFocus: true });
+    } else if (!isMobileSheet() && desktopDrawerOpen) {
+      event.preventDefault();
+      setDesktopDrawerOpen(false, { restoreFocus: true });
     } else {
       closeMenus();
     }
@@ -4042,7 +4078,7 @@ events.set("layout-warnings", (data) => setLayoutWarnings(data.warnings || []));
 events.set("ended", () => markSessionEnded());
 connectLiveEvents();
 
-applySheetState();
+applyConversationState();
 settleQueuedFromTranscript(initialChat, false);
 render();
 setChromeOutdated(false);

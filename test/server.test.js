@@ -836,7 +836,10 @@ test("chrome page ships the phone conversation dock and the viewport contract it
 
   // The dock is a real disclosure control: a labelled button with expanded state over the
   // panel it reveals, a live summary, and a scrim the sheet rises over.
-  assert.match(html, /<aside class="panel" id="panel">/);
+  assert.match(html, /<aside class="panel" id="panel" aria-labelledby="conversationTitle">/);
+  assert.match(html, /<h2 id="conversationTitle">Conversation<\/h2>/);
+  assert.match(html, /<div class="panel-scroll" id="panelScroll" inert>/);
+  assert.match(html, /<div class="composer" id="chatComposer" inert>/);
   assert.match(html, /<div class="panel-scrim" id="panelScrim"><\/div>/);
   assert.match(
     html,
@@ -1109,7 +1112,7 @@ test("chrome keeps queued notes at the tail of the one conversation, above the s
   // note is the end of the conversation rather than a second region with its own grammar.
   assert.match(
     html,
-    /<div class="panel-scroll" id="panelScroll"><div class="chat" id="chatLog"><\/div><div class="chat chat-queued" id="queuedLog"><\/div><\/div><div class="composer" id="chatComposer">/,
+    /<div class="panel-scroll" id="panelScroll" inert><div class="chat" id="chatLog"><\/div><div class="chat chat-queued" id="queuedLog"><\/div><\/div><div class="composer" id="chatComposer" inert>/,
   );
   assert.doesNotMatch(html, /annotation-pills/);
   assert.doesNotMatch(html, /<h2>Queued Annotations<\/h2>/);
