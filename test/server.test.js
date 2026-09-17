@@ -778,7 +778,7 @@ test("chrome top bar uses an Annotate switch instead of a labeled toggle button"
   assert.doesNotMatch(html, /Inspect/);
 });
 
-test("annotate switch shows a brass track and ink knob when enabled", async () => {
+test("annotate switch shows an activity track and ink knob when enabled", async () => {
   const js = await chromeClientSource();
   const css = await chromeCssSource();
 
@@ -790,15 +790,20 @@ test("annotate switch shows a brass track and ink knob when enabled", async () =
 test("chrome declares the Lavish design-system tokens", async () => {
   const css = await chromeCssSource();
 
-  assert.match(css, /--ink-900:#0f1115/);
-  assert.match(css, /--cream-100:#f7f3ea/);
-  assert.match(css, /--brass-500:#f4c95d/);
+  assert.match(css, /--void:#000/);
+  assert.match(css, /--surface:#080808/);
+  assert.match(css, /--app-ink:#f8f4eb/);
+  assert.match(css, /--app-feedback:#ffb386/);
+  assert.match(css, /--app-risk:#f87171/);
+  assert.match(css, /--app-pending:#f2c14e/);
+  assert.match(css, /--app-activity:#6fc7c2/);
+  assert.match(css, /--border-interactive:var\(--ink-3\)/);
   assert.match(css, /--font-serif:/);
   assert.match(css, /--font-sans:/);
   assert.match(css, /--text-display:92px/);
   assert.match(css, /--lh-display:1/);
   assert.match(css, /--space-32:64px/);
-  assert.match(css, /--shadow-floating:0 20px 70px rgba\(0,0,0,.35\)/);
+  assert.match(css, /--shadow-floating:none/);
   assert.match(css, /--ease:cubic-bezier\(.2,.6,.2,1\)/);
   assert.match(css, /--dur-slow:320ms/);
   assert.match(css, /--bar-h:56px/);
@@ -871,7 +876,7 @@ test("overflow menu shows the artifact path with a copy affordance", async () =>
   assert.match(html, /class="menu-file" id="copyPath"[^>]*title="Copy path · \/tmp\/artifact\/index\.html"/);
   assert.match(html, /class="copy-hint"/);
   assert.match(css, /\.menu-file\{[^}]*font-family:var\(--font-mono\)/);
-  assert.match(css, /\.copy-hint\.copied\{color:var\(--accent-hover\)/);
+  assert.match(css, /\.copy-hint\.copied\{color:var\(--app-activity\)/);
 });
 
 test("overflow menu path keeps the file name visible and elides the directories", async () => {
@@ -960,7 +965,7 @@ test("overflow menu offers publishing an ht-ml.app link via a share dialog", asy
   assert.match(css, /\.share-overlay\{[^}]*z-index:80;/);
   assert.match(css, /\.share-card/);
   assert.match(css, /\.share-link/);
-  assert.match(css, /box-shadow:var\(--shadow-floating\)/);
+  assert.match(css, /\.share-card\{[^}]*box-shadow:none/);
   // The codebase has no global [hidden] rule, so display-setting overlays need explicit
   // [hidden] rules or they show through before they should (e.g. the result block).
   assert.match(css, /\.share-overlay\[hidden\]\{display:none;?\}/);
@@ -1025,8 +1030,8 @@ test("chrome centers the top bar row while bottom-aligning the identity cluster"
 test("chrome chat bubbles follow the preview mock shades", async () => {
   const css = await chromeCssSource();
 
-  assert.match(css, /\.bubble\.user\{[^}]*background:var\(--bg-elevated\)/);
-  assert.match(css, /\.bubble\.user\{[^}]*border-color:var\(--border-strong\)/);
+  assert.match(css, /\.bubble\.user\{[^}]*background:var\(--feedback\)/);
+  assert.match(css, /\.bubble\.user\{[^}]*color:#000/);
   assert.match(css, /\.bubble\.agent\{[^}]*background:transparent/);
   assert.match(css, /\.bubble\.agent\{[^}]*border-color:var\(--border-subtle\)/);
   assert.match(css, /border-top-color:var\(--accent\)/);
@@ -6139,7 +6144,7 @@ test("ended session shows an overlay card over the dimmed chrome", async () => {
   assert.match(html, /class="ended-copy">\/tmp\/artifact\.html</);
   assert.doesNotMatch(html, /The agent polling loop can stop\./);
   assert.match(css, /\.ended-overlay\{[^}]*inset:var\(--bar-h\) 0 0 0/);
-  assert.match(css, /\.ended-overlay\{[^}]*background:rgba\(15,17,21,.86\)/);
+  assert.match(css, /\.ended-overlay\{[^}]*background:rgba\(0,0,0,.86\)/);
   assert.match(css, /\.ended-title\{[^}]*font-family:var\(--font-serif\)/);
   assert.match(js, /endedOverlay\.hidden = false/);
   assert.match(js, /annotationSwitch\.disabled = true/);

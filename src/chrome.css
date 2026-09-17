@@ -29,47 +29,41 @@
 }
 
 :root {
-  --ink-900: #0f1115;
-  --ink-800: #11141a;
-  --ink-700: #171a21;
-  --ink-600: #1c212b;
-  --steel-700: #2a2f3a;
-  --steel-600: #303745;
-  --steel-500: #3c4557;
-  --steel-400: #8c96aa;
-  --steel-300: #aeb6c6;
-  --steel-200: #b9c0cf;
-  --steel-100: #d8deea;
-  --cream-50: #fffbf3;
-  --cream-100: #f7f3ea;
-  --cream-200: #e8e1cf;
-  --brass-500: #f4c95d;
-  --brass-400: #ffd877;
-  --brass-ink: #17130a;
-  --sage-900: #172419;
-  --sage-700: #315f3a;
-  --sage-300: #8fe39e;
-  --amber-900: #25230f;
-  --amber-700: #5d4d1b;
-  --rust-500: #f06464;
-  --bg: var(--ink-900);
-  --bg-panel: var(--ink-800);
-  --bg-bar: var(--ink-700);
-  --bg-elevated: var(--ink-600);
-  --fg: var(--cream-100);
-  --fg-muted: var(--steel-100);
-  --fg-dim: var(--steel-200);
-  --fg-faint: var(--steel-300);
-  --fg-label: var(--steel-400);
-  --border: var(--steel-600);
-  --border-subtle: var(--steel-700);
-  --border-strong: var(--steel-500);
-  --accent: var(--brass-500);
-  --accent-hover: var(--brass-400);
-  --accent-ink: var(--brass-ink);
-  --danger: var(--rust-500);
-  --font-serif: var(--font-sans);
+  --void: #000000;
+  --surface: #080808;
+  --surface-2: #101010;
+  --rule: #1b1b1b;
+  --dim: #2a2a2a;
+  --rule-2: #2e2e2e;
+  --ink-3: #787878;
+  --ink-2: #a3a3a3;
+  --app-ink: #f8f4eb;
+  --app-feedback: #ffb386;
+  --app-risk: #f87171;
+  --app-pending: #f2c14e;
+  --app-activity: #6fc7c2;
+  --bg: var(--void);
+  --bg-panel: var(--surface);
+  --bg-bar: var(--surface-2);
+  --bg-elevated: var(--surface-2);
+  --fg: var(--app-ink);
+  --fg-muted: var(--ink-2);
+  --fg-dim: var(--ink-2);
+  --fg-faint: var(--ink-3);
+  --fg-label: var(--ink-3);
+  --border: var(--rule-2);
+  --border-subtle: var(--rule);
+  --border-strong: var(--dim);
+  --border-interactive: var(--ink-3);
+  --accent: var(--app-activity);
+  --accent-hover: var(--app-ink);
+  --accent-ink: #000000;
+  --danger: var(--app-risk);
+  --pending: var(--app-pending);
+  --feedback: var(--app-feedback);
   --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-sans);
+  --font-display: var(--font-sans);
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   --text-xs: 12px;
   --lh-xs: 1.35;
@@ -116,15 +110,16 @@
   --space-20: 40px;
   --space-24: 48px;
   --space-32: 64px;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-xl: 14px;
-  --radius-pill: 999px;
+  --radius-sm: 1px;
+  --radius-md: 2px;
+  --radius-lg: 3px;
+  --radius-xl: 3px;
+  --radius-pill: 3px;
+  --w-semibold: 600;
   --hairline: 1px solid var(--border);
   --hairline-subtle: 1px solid var(--border-subtle);
-  --shadow-tooltip: 0 16px 44px rgba(0, 0, 0, 0.35);
-  --shadow-floating: 0 20px 70px rgba(0, 0, 0, 0.35);
+  --shadow-tooltip: none;
+  --shadow-floating: none;
   --bar-h: 56px;
   --bar-pad: var(--space-8);
   --rail-w: 48px;
@@ -222,7 +217,7 @@ body.lavish {
 .switch-track {
   width: 34px;
   height: 20px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
   background: var(--border);
   position: relative;
   flex-shrink: 0;
@@ -234,7 +229,7 @@ body.lavish {
   left: 2px;
   width: 16px;
   height: 16px;
-  border-radius: var(--radius-pill);
+  border-radius: 50%;
   background: var(--fg-faint);
   transition:
     left 150ms var(--ease),
@@ -275,10 +270,10 @@ body.lavish {
   gap: 6px;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid rgba(244, 201, 93, 0.35);
-  border-radius: 9px;
-  background: rgba(37, 35, 15, 0.72);
-  color: var(--brass-400);
+  border: 1px solid var(--border-interactive);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--pending);
   font-family: inherit;
   font-size: var(--text-sm);
   font-weight: var(--w-bold);
@@ -287,9 +282,9 @@ body.lavish {
 }
 .warnings-button:hover:not(:disabled),
 .warnings-button[aria-expanded="true"] {
-  border-color: rgba(244, 201, 93, 0.6);
-  background: rgba(93, 77, 27, 0.5);
-  color: var(--accent-hover);
+  border-color: var(--pending);
+  background: var(--surface);
+  color: var(--pending);
 }
 .warnings-button:disabled {
   cursor: not-allowed;
@@ -302,9 +297,9 @@ body.lavish {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: var(--accent-ink);
+  border-radius: var(--radius-lg);
+  background: var(--pending);
+  color: #000;
   font-size: 11px;
   font-weight: var(--w-bold);
   line-height: 1;
@@ -394,7 +389,7 @@ body.lavish {
   border-color: var(--border-strong);
 }
 .warning-row.is-outstanding {
-  background: var(--ink-700);
+  background: var(--surface-2);
 }
 .warning-select {
   width: 14px;
@@ -435,26 +430,26 @@ body.lavish {
   display: inline-flex;
   align-items: center;
   padding: 2px 6px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
-  background: var(--ink-800);
+  background: var(--surface);
   color: var(--fg-faint);
   font-size: 10px;
   line-height: 1.4;
   white-space: nowrap;
 }
 .warning-chip.severity {
-  border-color: rgba(240, 100, 100, 0.4);
+  border-color: var(--danger);
   color: var(--danger);
 }
 .warning-chip.status-queued,
 .warning-chip.status-unverified {
-  border-color: rgba(244, 201, 93, 0.4);
-  color: var(--accent);
+  border-color: var(--pending);
+  color: var(--pending);
 }
 .warning-chip.status-recurring,
 .warning-chip.status-reopened {
-  border-color: rgba(240, 100, 100, 0.4);
+  border-color: var(--danger);
   color: var(--danger);
 }
 .warning-target {
@@ -477,7 +472,7 @@ body.lavish {
   align-items: center;
   gap: 5px;
   padding: 4px 8px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-interactive);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg-faint);
@@ -486,7 +481,7 @@ body.lavish {
   cursor: pointer;
 }
 .warning-action:hover:not(:disabled) {
-  border-color: var(--border-strong);
+  border-color: var(--border-interactive);
   color: var(--fg);
 }
 .warning-action:disabled {
@@ -495,9 +490,6 @@ body.lavish {
 }
 .warnings-foot {
   border-top: var(--hairline-subtle);
-  /* The list scrolls under this footer, so lift it with a soft shadow - otherwise a row clipped
-     mid-content at the boundary reads as broken rather than scrollable. */
-  box-shadow: 0 -10px 14px -10px rgba(0, 0, 0, 0.55);
   padding: 10px var(--space-8) 12px;
   display: flex;
   flex-direction: column;
@@ -522,17 +514,17 @@ body.lavish {
   height: 34px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-interactive);
   background: transparent;
   color: var(--fg-dim);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   padding: 0;
 }
 .more-button:hover:not(:disabled),
 .more-button[aria-expanded="true"] {
-  border-color: var(--border-strong);
-  background: var(--steel-700);
+  border-color: var(--border-interactive);
+  background: var(--surface-2);
   color: var(--fg);
 }
 .more-button:disabled {
@@ -544,7 +536,7 @@ body.lavish {
   background: var(--bg-bar);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-tooltip);
+  box-shadow: none;
   padding: 6px;
   z-index: 70;
 }
@@ -577,14 +569,14 @@ body.lavish {
   background: transparent;
   padding: 3px 4px;
   margin: 0 -4px;
-  border-radius: 7px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--fg-muted);
 }
 .menu-file:hover {
-  background: var(--steel-700);
+  background: var(--surface-2);
 }
 .menu-file > svg {
   opacity: 0.7;
@@ -627,7 +619,7 @@ body.lavish {
   display: none;
 }
 .copy-hint.copied {
-  color: var(--accent-hover);
+  color: var(--app-activity);
 }
 .copy-hint.copied .icon-copy {
   display: none;
@@ -656,7 +648,7 @@ body.lavish {
   color: var(--fg);
 }
 .menu-item:hover:not(:disabled) {
-  background: var(--steel-700);
+  background: var(--surface-2);
 }
 .menu-item:disabled {
   cursor: not-allowed;
@@ -673,7 +665,7 @@ body.lavish {
   opacity: 1;
 }
 .menu-item.danger:hover:not(:disabled) {
-  background: rgba(240, 100, 100, 0.1);
+  background: var(--surface-2);
 }
 .button {
   border: 0;
@@ -710,7 +702,7 @@ body.lavish {
   color: var(--danger);
 }
 .button-danger:hover:not(:disabled) {
-  background: rgba(240, 100, 100, 0.1);
+  background: var(--surface-2);
 }
 .button-danger > svg {
   flex-shrink: 0;
@@ -722,7 +714,7 @@ body.lavish {
   display: grid;
   place-items: center;
   padding: var(--space-16);
-  background: rgba(15, 17, 21, 0.72);
+  background: rgba(0, 0, 0, 0.72);
 }
 .share-overlay[hidden] {
   display: none;
@@ -735,7 +727,7 @@ body.lavish {
   border-radius: var(--radius-xl);
   background: var(--bg-panel);
   color: var(--fg);
-  box-shadow: var(--shadow-floating);
+  box-shadow: none;
   padding: var(--space-12);
 }
 .share-head {
@@ -776,8 +768,8 @@ body.lavish {
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-interactive);
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--fg-muted);
   cursor: pointer;
@@ -789,7 +781,7 @@ body.lavish {
 }
 .share-close:hover {
   color: var(--fg);
-  border-color: var(--border-strong);
+  border-color: var(--border-interactive);
 }
 .share-copy,
 .share-note {
@@ -820,7 +812,7 @@ body.lavish {
 .share-result input {
   min-width: 0;
   width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-interactive);
   border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--fg);
@@ -886,7 +878,7 @@ body.lavish {
 }
 .share-copy-btn {
   flex: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-interactive);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg-muted);
@@ -899,7 +891,7 @@ body.lavish {
 }
 .share-copy-btn:hover {
   color: var(--fg);
-  border-color: var(--border-strong);
+  border-color: var(--border-interactive);
 }
 .share-actions {
   display: flex;
@@ -908,7 +900,7 @@ body.lavish {
   margin-top: var(--space-12);
 }
 .share-cancel {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-interactive);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg-muted);
@@ -920,7 +912,7 @@ body.lavish {
 }
 .share-cancel:hover {
   color: var(--fg);
-  border-color: var(--border-strong);
+  border-color: var(--border-interactive);
 }
 .layout {
   position: relative;
@@ -955,6 +947,28 @@ body.lavish {
 .panel-toggle,
 .panel-scrim {
   display: none;
+}
+.panel-summary {
+  font-family: var(--font-mono);
+}
+.panel-toggle {
+  border: 1px solid var(--border-interactive);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  color: var(--app-activity);
+}
+.panel-summary.is-pending,
+.panel-summary.is-accent {
+  color: var(--pending);
+}
+.panel-summary.is-feedback {
+  color: var(--feedback);
+}
+.panel-summary.is-risk {
+  color: var(--danger);
+}
+.panel-summary.is-activity {
+  color: var(--app-activity);
 }
 @media (min-width: 861px) {
   .panel {
@@ -1077,8 +1091,9 @@ body.lavish {
 }
 .bubble.user {
   align-self: flex-end;
-  background: var(--bg-elevated);
-  border-color: var(--border-strong);
+  background: var(--feedback);
+  border-color: var(--feedback);
+  color: #000;
 }
 .bubble.agent {
   align-self: flex-start;
@@ -1110,7 +1125,7 @@ body.lavish {
 .spinner {
   width: 14px;
   height: 14px;
-  border-radius: var(--radius-pill);
+  border-radius: 50%;
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   animation: spin 0.8s linear infinite;
@@ -1160,10 +1175,10 @@ body.lavish {
   width: 18px;
   height: 18px;
   border: 0;
-  border-radius: var(--radius-pill);
+  border-radius: 50%;
   padding: 0;
-  background: var(--border);
-  color: var(--fg-muted);
+  background: var(--pending);
+  color: #000;
   cursor: pointer;
 }
 .queued-remove:disabled {
@@ -1200,10 +1215,10 @@ body.lavish {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* A selected range keeps the artifact's own highlight: brass means attention is here. */
+/* A selected range keeps the chrome's pending state distinct from artifact-owned content. */
 .anchor-excerpt.text {
-  background: rgba(244, 201, 93, 0.22);
-  box-shadow: 0 0 0 1px rgba(244, 201, 93, 0.35);
+  background: var(--surface-2);
+  outline: 1px solid var(--pending);
   color: var(--fg);
   border-radius: 3px;
   padding: 0 3px;
@@ -1287,7 +1302,7 @@ body.lavish {
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: var(--cream-200);
+  color: var(--ink-2);
 }
 .chat-md code {
   font-family: var(--font-mono);
@@ -1296,7 +1311,7 @@ body.lavish {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0 5px;
-  color: var(--cream-200);
+  color: var(--ink-2);
 }
 .chat-md pre code {
   background: none;
@@ -1335,7 +1350,7 @@ body.lavish {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
-  color: var(--fg-muted);
+  color: var(--app-activity);
   font-size: 11px;
   font-weight: var(--w-medium);
   line-height: 1.4;
@@ -1375,7 +1390,7 @@ body.lavish {
   min-height: 82px;
   resize: vertical;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-interactive);
   background: var(--bg);
   color: var(--fg);
   padding: 10px;
@@ -1415,7 +1430,7 @@ body.lavish {
   width: 32px;
   height: 32px;
   flex: 0 0 auto;
-  border-radius: 5px;
+  border-radius: var(--radius-lg);
   object-fit: cover;
 }
 .chat-attachment-copy {
@@ -1472,10 +1487,10 @@ body.lavish {
 }
 .send-hint.persistent {
   padding: var(--space-4);
-  border: 1px solid var(--amber-700);
+  border: 1px solid var(--pending);
   border-radius: var(--radius-sm);
-  background: var(--amber-900);
-  color: var(--accent-hover);
+  background: var(--surface-2);
+  color: var(--pending);
 }
 .send-hint[hidden] {
   display: none;
@@ -1489,7 +1504,7 @@ body.lavish {
 .ended-overlay {
   position: fixed;
   inset: var(--bar-h) 0 0 0;
-  background: rgba(15, 17, 21, 0.86);
+  background: rgba(0, 0, 0, 0.86);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1602,11 +1617,10 @@ body.layout-gate-active iframe#artifact {
     padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
     border-left: 0;
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    /* The hairline is a shadow, not a border: a border would add to the sheet's box and push
-       the docked head one pixel past the viewport edge. */
-    box-shadow:
-      0 -1px 0 var(--border-subtle),
-      var(--shadow-floating);
+    /* An inset outline separates the sheet without adding a pixel to its measured geometry. */
+    box-shadow: none;
+    outline: 1px solid var(--border-subtle);
+    outline-offset: -1px;
     /* Collapsed: slide everything but the dock below the viewport. The sheet keeps its full
        height, so opening it is one transform and the chat never reflows mid-gesture. */
     transform: translateY(calc(100% - var(--dock-h) - env(safe-area-inset-bottom, 0px)));
@@ -1639,7 +1653,7 @@ body.layout-gate-active iframe#artifact {
     width: 36px;
     height: 4px;
     margin: 0 auto 6px;
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-lg);
     background: var(--border-strong);
   }
   .panel-head-row {
@@ -1669,7 +1683,7 @@ body.layout-gate-active iframe#artifact {
     display: none;
   }
   .panel-summary.is-accent {
-    color: var(--accent);
+    color: var(--pending);
     font-weight: var(--w-semi);
   }
   .panel-summary.is-unread::before {
@@ -1678,8 +1692,8 @@ body.layout-gate-active iframe#artifact {
     width: 6px;
     height: 6px;
     margin-right: 6px;
-    border-radius: var(--radius-pill);
-    background: var(--accent);
+    border-radius: 50%;
+    background: var(--feedback);
     vertical-align: 1px;
   }
   .panel-toggle {
@@ -1690,10 +1704,10 @@ body.layout-gate-active iframe#artifact {
     width: 32px;
     height: 32px;
     padding: 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-interactive);
+    border-radius: var(--radius-lg);
     background: var(--bg-elevated);
-    color: var(--fg-muted);
+    color: var(--app-activity);
     cursor: pointer;
   }
   .panel-toggle svg {
@@ -1703,8 +1717,8 @@ body.layout-gate-active iframe#artifact {
   body.sheet-open .panel-toggle svg {
     transform: rotate(180deg);
   }
-  .panel-head.is-fresh .panel-toggle {
-    animation: dock-pulse 700ms var(--ease);
+  .panel-head.is-fresh .panel-handle {
+    animation: dock-marker 700ms var(--ease);
   }
   .panel-scroll {
     flex: 1 1 56px;
@@ -1738,14 +1752,24 @@ body.layout-gate-active iframe#artifact {
     z-index: 1;
     padding-top: 8px;
     background: var(--bg-panel);
-    box-shadow: 0 -1px 0 var(--border-subtle);
+    box-shadow: none;
+  }
+  .composer .actions::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 1px;
+    background: var(--border-subtle);
+    pointer-events: none;
   }
   .panel-scrim {
     display: block;
     position: fixed;
     inset: var(--bar-h) 0 0 0;
     z-index: 29;
-    background: rgba(15, 17, 21, 0.72);
+    background: rgba(0, 0, 0, 0.72);
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--dur-slow) var(--ease);
@@ -1787,13 +1811,21 @@ body.layout-gate-active iframe#artifact {
   .panel-head.is-fresh .panel-toggle {
     animation: none;
   }
+  .panel-head.is-fresh .panel-handle {
+    animation: none;
+  }
 }
-@keyframes dock-pulse {
+@media (min-width: 861px) and (prefers-reduced-motion: reduce) {
+  .panel {
+    transition: none;
+  }
+}
+@keyframes dock-marker {
   0% {
-    box-shadow: 0 0 0 0 rgba(244, 201, 93, 0.55);
+    background: var(--pending);
   }
   100% {
-    box-shadow: 0 0 0 10px rgba(244, 201, 93, 0);
+    background: var(--border-strong);
   }
 }
 
@@ -1804,7 +1836,7 @@ body.layout-gate-active iframe#artifact {
 .whiteboard-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 17, 21, 0.92);
+  background: rgba(0, 0, 0, 0.92);
   z-index: 80;
   display: flex;
 }
@@ -1837,8 +1869,8 @@ body.layout-gate-active iframe#artifact {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  border: 1px solid var(--border-interactive);
+  border-radius: 50%;
   background: var(--bg-elevated);
   color: var(--fg-faint);
   cursor: pointer;
