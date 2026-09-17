@@ -7060,6 +7060,7 @@ test("the dock summarizes what the user should know while the sheet is down", as
   let state = conversationState(chrome);
   assert.equal(state.summary, "Renamed the payment step.");
   assert.match(state.summaryClass, /is-feedback/);
+  assert.match(state.summaryClass, /is-unread/);
 
   // Work the user queued from the artifact outranks the unread preview: it is the thing they
   // still have to send.
@@ -7070,7 +7071,9 @@ test("the dock summarizes what the user should know while the sheet is down", as
   state = conversationState(chrome);
   assert.equal(state.summary, "1 queued");
   assert.match(state.summaryClass, /is-pending/);
+  assert.match(state.summaryClass, /is-accent/);
   assert.doesNotMatch(state.summaryClass, /is-feedback/);
+  assert.doesNotMatch(state.summaryClass, /is-unread/);
   assert.match(String(chrome.element("panelHead").classList), /is-fresh/);
 
   chrome.sendFrameMessage({

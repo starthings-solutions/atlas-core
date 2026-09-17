@@ -1234,6 +1234,9 @@ function renderConversationSummary() {
   panelSummary.dataset.tone = summary.tone;
   for (const tone of ["pending", "feedback", "risk", "activity"])
     panelSummary.classList.toggle(`is-${tone}`, summary.tone === tone);
+  // Keep the sheet's existing visual contract until its CSS migrates to semantic tone classes.
+  panelSummary.classList.toggle("is-accent", summary.tone === "pending");
+  panelSummary.classList.toggle("is-unread", summary.tone === "feedback");
 }
 
 // A brief pulse on the closed conversation control when a prompt or reply needs attention.
