@@ -4,6 +4,13 @@ The published `lavish-axi` package vendors the following third-party software in
 Each component remains under its own license; the notices below satisfy their attribution requirements.
 The whiteboard bundle (`dist/whiteboard/`) is built from these packages by `scripts/build.js`.
 
+## Fonts vendored into `dist/chrome-fonts/`
+
+| Family        | License                   |
+| ------------- | ------------------------- |
+| Archivo       | SIL Open Font License 1.1 |
+| IBM Plex Mono | SIL Open Font License 1.1 |
+
 ## Bundled into `dist/whiteboard/whiteboard.js` and `whiteboard.css`
 
 | Package                                              | License | Copyright                                         |

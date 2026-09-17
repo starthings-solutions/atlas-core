@@ -99,6 +99,36 @@ const designAssetUrls = {
     type: "application/javascript",
   },
 };
+const chromeFontAssetUrls = {
+  "archivo-latin-wdth-normal.woff2": {
+    packaged: new URL("./chrome-fonts/archivo-latin-wdth-normal.woff2", import.meta.url),
+    source: new URL(
+      "../node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2",
+      import.meta.url,
+    ),
+  },
+  "ibm-plex-mono-latin-400-normal.woff2": {
+    packaged: new URL("./chrome-fonts/ibm-plex-mono-latin-400-normal.woff2", import.meta.url),
+    source: new URL(
+      "../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2",
+      import.meta.url,
+    ),
+  },
+  "ibm-plex-mono-latin-500-normal.woff2": {
+    packaged: new URL("./chrome-fonts/ibm-plex-mono-latin-500-normal.woff2", import.meta.url),
+    source: new URL(
+      "../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2",
+      import.meta.url,
+    ),
+  },
+  "ibm-plex-mono-latin-600-normal.woff2": {
+    packaged: new URL("./chrome-fonts/ibm-plex-mono-latin-600-normal.woff2", import.meta.url),
+    source: new URL(
+      "../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2",
+      import.meta.url,
+    ),
+  },
+};
 
 const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60_000;
 const WHITEBOARD_CHANNEL_TOKEN_TTL_MS = 5 * 60_000;
@@ -1307,6 +1337,16 @@ export async function serve({
     }
   });
 
+  app.get("/chrome-fonts/:asset", async (req, res, next) => {
+    try {
+      const asset = chromeFontAssetUrls[req.params.asset];
+      if (!asset) return res.status(404).send("Not found");
+      res.type("font/woff2").send(await readChromeFontAsset(asset));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get("/design/:asset", async (req, res, next) => {
     try {
       const asset = designAssetUrls[req.params.asset];
@@ -1932,13 +1972,21 @@ function createDeniedHtml({ title, message, workingUrl }) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle} - Lavish Editor</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f4ef;color:#25221f;font:16px/1.5 system-ui,sans-serif}.card{width:min(560px,calc(100% - 40px));padding:32px;border:1px solid #d9d0c5;border-radius:16px;background:#fffdf9;box-shadow:0 12px 40px #25221f18}h1{margin:0 0 12px;font-size:26px}p{margin:0 0 18px}.url{display:block;padding:12px 14px;border-radius:10px;background:#f0ebe4;color:#25221f;overflow-wrap:anywhere}a{color:inherit;font-weight:700}</style></head><body><main class="card"><h1>${safeTitle}</h1><p>${safeMessage}</p><p>Open this working URL:</p><a class="url" href="${safeUrl}">${safeUrl}</a></main></body></html>`;
 }
 
-async function readDesignAsset(asset) {
+async function readAssetWithFallback(asset, encoding) {
   try {
-    return await readFile(asset.packaged, "utf8");
+    return await readFile(asset.packaged, encoding);
   } catch (error) {
     if (error && error.code !== "ENOENT") throw error;
-    return readFile(asset.source, "utf8");
+    return readFile(asset.source, encoding);
   }
+}
+
+function readDesignAsset(asset) {
+  return readAssetWithFallback(asset, "utf8");
+}
+
+function readChromeFontAsset(asset) {
+  return readAssetWithFallback(asset);
 }
 
 // Map a legacy root-absolute `/design/<asset>` reference to the packaged design file on disk

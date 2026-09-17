@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+const CHROME_FONT_ASSETS = [
+  "archivo-latin-wdth-normal.woff2",
+  "ibm-plex-mono-latin-400-normal.woff2",
+  "ibm-plex-mono-latin-500-normal.woff2",
+  "ibm-plex-mono-latin-600-normal.woff2",
+];
+
 test("check script runs all verification commands", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   const checkCommands = packageJson.scripts.check.split(" && ");
@@ -60,12 +67,11 @@ test("public lavish skill is not marked internal", async () => {
   assert.doesNotMatch(frontmatter, /^metadata:\n {2}internal: true$/m);
 });
 
-test("build copies local design assets for published artifact injection", async () => {
-  const buildScript = await readFile(new URL("../scripts/build.js", import.meta.url), "utf8");
-
-  assert.match(buildScript, /daisyui\.css/);
-  assert.match(buildScript, /daisyui-themes\.css/);
-  assert.match(buildScript, /tailwindcss-browser\.js/);
+test("build vendors the chrome font files shipped in dist", async () => {
+  for (const asset of CHROME_FONT_ASSETS) {
+    const data = await readFile(new URL(`../dist/chrome-fonts/${asset}`, import.meta.url));
+    assert.ok(data.byteLength > 1_000, asset);
+  }
 });
 
 test("package metadata matches the GitHub repository used for npm provenance", async () => {

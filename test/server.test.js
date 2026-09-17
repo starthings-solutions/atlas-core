@@ -3346,6 +3346,29 @@ test("/chrome.css serves the extracted chrome stylesheet", async () => {
   }
 });
 
+test("/chrome-fonts serves vendored application fonts and rejects unknown assets", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "lavish-fonts-"));
+  const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
+  try {
+    const base = `http://127.0.0.1:${server.port}`;
+    for (const asset of [
+      "archivo-latin-wdth-normal.woff2",
+      "ibm-plex-mono-latin-400-normal.woff2",
+      "ibm-plex-mono-latin-500-normal.woff2",
+      "ibm-plex-mono-latin-600-normal.woff2",
+    ]) {
+      const response = await fetch(`${base}/chrome-fonts/${asset}`);
+      assert.equal(response.status, 200, asset);
+      assert.match(response.headers.get("content-type") || "", /font\/woff2|application\/font-woff/);
+      assert.ok((await response.arrayBuffer()).byteLength > 1_000, asset);
+    }
+    assert.equal((await fetch(`${base}/chrome-fonts/not-a-font.woff2`)).status, 404);
+  } finally {
+    await server.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("/design serves local Tailwind and DaisyUI artifact assets", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });

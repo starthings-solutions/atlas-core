@@ -24,6 +24,26 @@ await esbuild.build({
 await chmod("dist/cli.mjs", 0o755);
 await copyFile("src/chrome-client.js", "dist/chrome-client.js");
 await copyFile("src/chrome.css", "dist/chrome.css");
+const chromeFonts = [
+  [
+    "node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2",
+    "archivo-latin-wdth-normal.woff2",
+  ],
+  [
+    "node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2",
+    "ibm-plex-mono-latin-400-normal.woff2",
+  ],
+  [
+    "node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2",
+    "ibm-plex-mono-latin-500-normal.woff2",
+  ],
+  [
+    "node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2",
+    "ibm-plex-mono-latin-600-normal.woff2",
+  ],
+];
+await mkdir("dist/chrome-fonts", { recursive: true });
+for (const [source, name] of chromeFonts) await copyFile(source, `dist/chrome-fonts/${name}`);
 await mkdir("dist/design", { recursive: true });
 await copyFile("node_modules/daisyui/daisyui.css", "dist/design/daisyui.css");
 await copyFile("node_modules/daisyui/themes.css", "dist/design/daisyui-themes.css");
