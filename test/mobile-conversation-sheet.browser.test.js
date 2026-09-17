@@ -47,6 +47,8 @@ const GEOMETRY = `() => {
     panelWidth: Math.round(panel.getBoundingClientRect().width),
     head: rect(document.getElementById("panelHead")),
     toggle: rect(document.getElementById("panelToggle")),
+    annotation: rect(document.getElementById("annotation")),
+    more: rect(document.getElementById("moreButton")),
     summaryRect: rect(document.getElementById("panelSummary")),
     frame: rect(document.getElementById("artifact")),
     chat: { visible: scroll.clientHeight, content: scroll.scrollHeight, inert: scroll.inert },
@@ -62,6 +64,7 @@ const GEOMETRY = `() => {
       content: document.getElementById("chatAttachments").scrollHeight,
     },
     actions: rect(document.getElementById("sendActions")),
+    attach: rect(document.getElementById("chatAttach")),
     send: rect(document.getElementById("send")),
     sendAndEnd: rect(document.getElementById("sendAndEnd")),
     textarea: rect(document.getElementById("chatInput")),
@@ -175,6 +178,16 @@ test(
       assert.equal(g.documentScrollable, false, "the page itself never scrolls");
     }
 
+    function assertCoarseTargets(g, names) {
+      for (const name of names) {
+        const target = g[name];
+        assert.ok(
+          target.width >= 44 && target.height >= 44,
+          `${name} is at least a 44px coarse-pointer target: ${JSON.stringify(target)}`,
+        );
+      }
+    }
+
     try {
       const artifact = path.join(temp, "review.html");
       await writeFile(artifact, ARTIFACT);
@@ -195,11 +208,14 @@ test(
       open(url);
       let g = geometry();
       assertDocked(g);
+      assertCoarseTargets(g, ["annotation", "more", "toggle"]);
       assert.equal(g.summary, "Agent not listening");
 
       evaluate('() => { document.getElementById("panelHead").click(); return "ok"; }');
       wait(500);
-      assertSheetUsable(geometry());
+      g = geometry();
+      assertSheetUsable(g);
+      assertCoarseTargets(g, ["attach", "send", "sendAndEnd"]);
 
       // The scrim lowers it again and the artifact is back to full height.
       evaluate('() => { document.getElementById("panelScrim").click(); return "ok"; }');

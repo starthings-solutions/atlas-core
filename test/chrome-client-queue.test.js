@@ -7151,8 +7151,6 @@ test("a cancelled dock swipe leaves the sheet unchanged and the next tap active"
   chrome.element("panelHead").dispatch("click", {});
   assert.equal(conversationState(chrome).sheetOpen, true);
 });
-
-
 // ---- Queued and sent notes are one conversation ----
 // A note the reviewer queues is a bubble on their side of the transcript from the moment they
 // queue it: dashed and removable while it lives only in this tab, settled in place once the

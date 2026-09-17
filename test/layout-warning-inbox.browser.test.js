@@ -457,9 +457,19 @@ test("a live reload preserves the review context Lavish owns", { skip: !runBrows
   try {
     const artifact = path.join(temp, "review-context.html");
     await copyFile(path.join(fixtures, "review-context.html"), artifact);
+    // The production artifact is deliberately cross-origin from the chrome. Teach only this
+    // copied fixture to relay a test input event so the preserved-engine case can exercise the
+    // artifact's real textarea listener despite chrome-devtools-axi 0.1.34 dropping input events
+    // for focused controls in cross-origin shadow roots.
+    await writeFile(
+      artifact,
+      `${await readFile(artifact, "utf8")}\n<script>window.addEventListener("message", (event) => { const kind = event.data?.kind; if (!["lavish-test:annotation-input", "lavish-test:annotation-probe", "lavish-test:annotation-queue"].includes(kind)) return; const textarea = document.querySelector(".lavish-annotation-root")?.shadowRoot?.querySelector("textarea"); if (kind === "lavish-test:annotation-input") textarea?.dispatchEvent(new Event("input", { bubbles: true, composed: true })); if (kind === "lavish-test:annotation-queue") textarea?.closest(".lavish-annotation-card")?.querySelector(".lavish-send")?.click(); event.source?.postMessage({ kind: "lavish-test:annotation-result", value: textarea?.value ?? null }, "*"); });</script>\n`,
+    );
     const output = run(process.execPath, ["bin/lavish-axi.js", artifact, "--no-open"], lavishEnv);
     const url = output.match(/url:\s*"([^"]+)"/)?.[1];
     assert.ok(url, output);
+    const key = new URL(url).pathname.split("/").pop();
+    assert.ok(key, url);
     run("chrome-devtools-axi", ["emulate", "--viewport", "1440x1000x1"], chromeEnv);
     run("chrome-devtools-axi", ["open", url], chromeEnv);
     wait(4500);
@@ -470,12 +480,43 @@ test("a live reload preserves the review context Lavish owns", { skip: !runBrows
     // Unsent annotation text on an element the reload will replace.
     click(/Annotate this paragraph/);
     wait(800);
-    run("chrome-devtools-axi", ["type", "Shorten this to one sentence"], chromeEnv);
+    run(
+      "chrome-devtools-axi",
+      [
+        "fill",
+        `@${ref(/textbox "Tell the agent what to change about this element\.\.\."/)}`,
+        "Shorten this to one sentence",
+      ],
+      chromeEnv,
+    );
+    const dispatchedInput = run(
+      "chrome-devtools-axi",
+      [
+        "eval",
+        'async () => await new Promise((resolve, reject) => { const frame = document.getElementById("artifact"); const timeout = setTimeout(() => { window.removeEventListener("message", receive); reject(new Error("artifact review-state input relay timed out")); }, 2500); const receive = (event) => { if (event.source !== frame.contentWindow || event.data?.type !== "lavish:reviewState") return; clearTimeout(timeout); window.removeEventListener("message", receive); resolve(JSON.stringify({ state: event.data.state, messageToken: event.data.artifact_load_token, frameToken: new URL(frame.src).searchParams.get("artifact_load_token") })); }; window.addEventListener("message", receive); frame.contentWindow.postMessage({ kind: "lavish-test:annotation-input" }, "*"); })',
+      ],
+      chromeEnv,
+    );
+    const emittedRaw = dispatchedInput.match(/result:\s*("(?:[^"\\]|\\.)*")/s)?.[1];
+    assert.ok(emittedRaw, dispatchedInput);
+    let emitted = JSON.parse(emittedRaw);
+    while (typeof emitted === "string") emitted = JSON.parse(emitted);
+    assert.equal(emitted.messageToken, emitted.frameToken, "the review-state token matches the current artifact frame");
+    assert.equal(emitted.state?.card?.text, "Shorten this to one sentence", JSON.stringify(emitted));
     wait(800);
 
     const before = snapshot();
     assert.match(before, /radio " Pro" checked/);
     assert.match(before, /checkbox " Include beta cohort" checked/);
+    const beforeState = run(
+      "chrome-devtools-axi",
+      [
+        "eval",
+        '() => JSON.stringify(Object.entries(sessionStorage).filter(([storageKey]) => storageKey.startsWith("lavish-axi:review-state:")))',
+      ],
+      chromeEnv,
+    );
+    assert.match(beforeState, /Shorten this to one sentence/);
 
     await writeFile(artifact, `${await readFile(artifact, "utf8")}\n<!-- revision -->\n`);
     wait(5000);
@@ -485,8 +526,25 @@ test("a live reload preserves the review context Lavish owns", { skip: !runBrows
     assert.match(after, /checkbox " Include beta cohort" checked/);
     assert.match(after, /Annotate <p>/, "the open annotation card comes back");
 
+    const restoredTextarea = run(
+      "chrome-devtools-axi",
+      [
+        "eval",
+        'async () => await new Promise((resolve, reject) => { const frame = document.getElementById("artifact"); const timeout = setTimeout(() => { window.removeEventListener("message", receive); reject(new Error("fixture annotation probe timed out")); }, 2500); const receive = (event) => { if (event.source !== frame.contentWindow || event.data?.kind !== "lavish-test:annotation-result") return; clearTimeout(timeout); window.removeEventListener("message", receive); resolve(JSON.stringify(event.data)); }; window.addEventListener("message", receive); frame.contentWindow.postMessage({ kind: "lavish-test:annotation-probe" }, "*"); })',
+      ],
+      chromeEnv,
+    );
+    assert.match(restoredTextarea, /Shorten this to one sentence/, "the restored card retains its draft text");
+
     // Queueing the restored card proves the unsent text itself survived, not just the card.
-    click(/button "Queue"/);
+    run(
+      "chrome-devtools-axi",
+      [
+        "eval",
+        'async () => await new Promise((resolve, reject) => { const frame = document.getElementById("artifact"); const timeout = setTimeout(() => { window.removeEventListener("message", receive); reject(new Error("restored annotation did not queue")); }, 2500); const receive = (event) => { if (event.source !== frame.contentWindow || event.data?.type !== "lavish:queuePrompt") return; clearTimeout(timeout); window.removeEventListener("message", receive); resolve(JSON.stringify(event.data)); }; window.addEventListener("message", receive); frame.contentWindow.postMessage({ kind: "lavish-test:annotation-queue" }, "*"); })',
+      ],
+      chromeEnv,
+    );
     wait(800);
     const queuedNote = run(
       "chrome-devtools-axi",
@@ -496,7 +554,8 @@ test("a live reload preserves the review context Lavish owns", { skip: !runBrows
       ],
       chromeEnv,
     );
-    const geometry = JSON.parse(JSON.parse(queuedNote.match(/result:\s*("(?:[^"\\]|\\.)*")/s)[1]));
+    let geometry = JSON.parse(queuedNote.match(/result:\s*("(?:[^"\\]|\\.)*")/s)[1]);
+    while (typeof geometry === "string") geometry = JSON.parse(geometry);
     assert.equal(geometry.text, "Shorten this to one sentence");
     assert.equal(geometry.borderStyle, "dashed");
     assert.equal(geometry.excerptWhiteSpace, "nowrap");

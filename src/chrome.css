@@ -1586,7 +1586,10 @@ body.layout-gate-active iframe#artifact {
     --bar-h: calc(56px + env(safe-area-inset-top, 0px));
     --dock-h: 60px;
     --sheet-peek: 16px;
-    --composer-reserve: calc(1px + var(--space-4) + 34px + var(--space-6) + env(safe-area-inset-bottom, 0px));
+    --composer-action-h: 34px;
+    --composer-reserve: calc(
+      1px + var(--space-4) + var(--composer-action-h) + var(--space-6) + env(safe-area-inset-bottom, 0px)
+    );
     --sheet-top: max(var(--bar-h) + var(--sheet-peek) - var(--vv-top, 0px), var(--sheet-peek));
   }
   .bar {
@@ -1784,6 +1787,31 @@ body.layout-gate-active iframe#artifact {
   }
   .share-copy-row {
     flex-direction: column;
+  }
+}
+/* Physical controls stay compact for a mouse, but phones reserve a 44px hit area without
+   changing the visual token sizes inside them. Keep the sheet's composer budget in sync so the
+   taller send row cannot be clipped on a short visual viewport. */
+@media (max-width: 860px) and (pointer: coarse) {
+  :root {
+    --composer-action-h: 44px;
+  }
+  .annotate-switch {
+    min-height: 44px;
+  }
+  .more-button,
+  .panel-toggle {
+    width: 44px;
+    height: 44px;
+  }
+  .chat-attach {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 2px 10px;
+  }
+  .actions .button {
+    min-height: 44px;
   }
 }
 /* A phone on its side has no height to share: the raised sheet covers the bar as well (the sheet

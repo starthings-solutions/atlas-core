@@ -116,6 +116,34 @@ test(
       CHROME_DEVTOOLS_AXI_SESSION: `lavish-event-transport-${process.pid}`,
       CHROME_DEVTOOLS_AXI_USER_DATA_DIR: path.join(temp, "chrome"),
     };
+
+    // A stopped legacy tab reloads on its explicit banner action. AXI 0.1.34 can retain the
+    // pre-navigation execution context briefly, so reselect the tab and use short synchronous
+    // probes instead of holding one evaluation open across that navigation.
+    async function waitForLiveReply(url, text) {
+      const deadline = Date.now() + 10_000;
+      let last = "";
+      while (Date.now() < deadline) {
+        const page = pageRows(run("chrome-devtools-axi", ["pages"], chromeEnv)).find(
+          (candidate) => candidate.url === url,
+        );
+        if (page) {
+          run("chrome-devtools-axi", ["selectpage", String(page.id)], chromeEnv);
+          const result = spawnSync(
+            "chrome-devtools-axi",
+            [
+              "eval",
+              `() => Boolean(window.__lavishChromeReady && document.getElementById("chatLog")?.textContent.includes(${JSON.stringify(text)}))`,
+            ],
+            { cwd: repoRoot, env: { ...process.env, ...chromeEnv }, encoding: "utf8", timeout: 5_000 },
+          );
+          last = `${result.stdout || ""}${result.stderr || ""}`;
+          if (!result.error && result.status === 0 && /result:\s*"?true"?/.test(last)) return last;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      throw new Error(`live event did not arrive after reselecting ${url}\n${last}`);
+    }
     const sessions = [];
     let oldServer;
     let currentServer;
@@ -219,7 +247,7 @@ test(
             chromeEnv,
             12_000,
           );
-          assert.match(protectedDraft, /no longer running/);
+          assert.match(protectedDraft, /Lavish was stopped\. Reload after you start it again\./);
           assert.doesNotMatch(protectedDraft, /updated/);
           run("chrome-devtools-axi", ["eval", '() => document.getElementById("outdatedReload").click()'], chromeEnv);
         }
@@ -253,15 +281,7 @@ test(
           body: JSON.stringify({ text: liveReply }),
         });
         assert.equal(reply.status, 200);
-        const observed = run(
-          "chrome-devtools-axi",
-          [
-            "eval",
-            `() => new Promise((resolve, reject) => { const deadline = Date.now() + 8000; const check = () => { if (document.getElementById("chatLog").textContent.includes(${JSON.stringify(liveReply)})) return resolve(true); if (Date.now() >= deadline) return reject(new Error("live event did not arrive")); setTimeout(check, 25); }; check(); })`,
-          ],
-          chromeEnv,
-          10_000,
-        );
+        const observed = await waitForLiveReply(session.url, liveReply);
         assert.match(observed, /result:\s*"?true"?/, `board ${index + 1} live event channel stayed connected`);
 
         const message = `seven-tab-message-${index + 1}`;

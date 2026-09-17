@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import * as esbuild from "esbuild";
-import { parse } from "parse5";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
@@ -17,6 +16,7 @@ async function chromePath() {
     process.env.CHROME_PATH,
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/opt/google/chrome/chrome",
     "/usr/bin/google-chrome",
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
@@ -40,10 +40,10 @@ function contentType(file) {
   return "application/octet-stream";
 }
 
-function dumpChromeDom(chrome, args, timeoutMs) {
+function waitForChromeResult(chrome, args, profile, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const child = spawn(chrome, args, { detached: true, stdio: ["ignore", "pipe", "ignore"] });
-    let stdout = "";
+    const child = spawn(chrome, args, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
     let settled = false;
     const stop = () => {
       try {
@@ -52,45 +52,52 @@ function dumpChromeDom(chrome, args, timeoutMs) {
         child.kill("SIGKILL");
       }
     };
-    const finish = (error) => {
+    const finish = (error, value) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       stop();
       if (error) reject(error);
-      else resolve(stdout);
+      else resolve(value);
     };
-    const timer = setTimeout(() => finish(new Error("Chrome did not dump the fixture DOM in time")), timeoutMs);
+    const diagnostic = () => (stderr ? `\nChrome stderr:\n${stderr.slice(-16 * 1024)}` : "");
+    const timer = setTimeout(
+      () => finish(new Error("Chrome did not report the fixture result in time" + diagnostic())),
+      timeoutMs,
+    );
     child.on("error", finish);
     child.on("exit", (code) => {
-      if (!settled) finish(new Error(`Chrome exited before dumping the fixture DOM (${code})`));
+      if (!settled) finish(new Error(`Chrome exited before reporting the fixture result (${code})${diagnostic()}`));
     });
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-      if (stdout.length > 8 * 1024 * 1024) {
-        finish(new Error("Chrome fixture DOM exceeded 8 MB"));
-      } else if (stdout.includes("</html>")) {
-        finish();
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+      if (stderr.length > 64 * 1024) stderr = stderr.slice(-64 * 1024);
+    });
+    (async () => {
+      while (!settled) {
+        try {
+          const port = Number((await readFile(path.join(profile, "DevToolsActivePort"), "utf8")).split("\n")[0]);
+          if (Number.isInteger(port) && port > 0) {
+            const response = await fetch(`http://127.0.0.1:${port}/json/list`);
+            const targets = await response.json();
+            const resultUrl = targets.find(
+              (target) => target.type === "page" && String(target.url).includes("/result?"),
+            )?.url;
+            if (resultUrl) finish(null, resultUrl);
+          }
+        } catch {
+          // Chrome creates its DevTools endpoint asynchronously; retry until the bounded deadline.
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
-    });
+    })();
   });
 }
 
-function resultFromDump(html) {
-  const document = parse(html);
-  const stack = /** @type {import("parse5").DefaultTreeAdapterMap["node"][]} */ ([document]);
-  while (stack.length > 0) {
-    const node = stack.pop();
-    if (!node) continue;
-    if (node.nodeName === "body") {
-      const element = /** @type {import("parse5").DefaultTreeAdapterMap["element"]} */ (node);
-      const attribute = element.attrs.find((item) => item.name === "data-result");
-      if (attribute) return JSON.parse(attribute.value);
-    }
-    if ("childNodes" in node) stack.push(...node.childNodes);
-  }
-  return null;
+function resultFromUrl(url) {
+  const value = new URL(url).searchParams.get("value");
+  return value ? JSON.parse(value) : null;
 }
 
 async function runBrowserFixture(t, fixtureName) {
@@ -152,22 +159,28 @@ async function runBrowserFixture(t, fixtureName) {
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("test server did not bind to a TCP port");
       const profile = path.join(root, "chrome-profile");
-      const stdout = await dumpChromeDom(
+      const resultUrl = await waitForChromeResult(
         chrome,
         [
           "--headless=new",
           "--disable-gpu",
           "--disable-dev-shm-usage",
           "--no-sandbox",
+          "--disable-background-networking",
+          "--disable-component-update",
+          "--disable-sync",
+          "--metrics-recording-only",
+          "--no-first-run",
+          "--no-default-browser-check",
           `--user-data-dir=${profile}`,
+          "--remote-debugging-port=0",
           "--run-all-compositor-stages-before-draw",
-          "--virtual-time-budget=20000",
-          "--dump-dom",
           `http://127.0.0.1:${address.port}/`,
         ],
+        profile,
         75_000,
       );
-      const result = resultFromDump(stdout);
+      const result = resultFromUrl(resultUrl);
       assert.ok(result, "browser fixture did not report a result");
       assert.equal(result.pass, true, result.error);
       return result;

@@ -2,7 +2,7 @@
 
 **Data:** 2026-09-17
 
-**Status:** aprovada pelo usuário em 2026-09-17
+**Status:** implementada e verificada
 
 **Upstream de referência:** `kunchenguid/lavish-axi` @ `4413dcc8eff35cdc659e2035b94194d3c9be55fa` (`0.1.71`)
 
