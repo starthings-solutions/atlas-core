@@ -34,6 +34,8 @@ No teste manual de geometria, o bounding box do iframe antes/depois de abrir o d
 
 - Contraste medido: texto primário 18,25:1; activity 10,13:1; danger 7,24:1; cinza pequeno 4,54:1.
 - A auditoria visual não encontrou P0. O P1 de alvos móveis foi corrigido com um teste RED/GREEN: `/tmp/lavish-task8-mobile-target-red.log`, `/tmp/lavish-task8-mobile-target-green.log`. Em 390 e 375px, annotation=95×44, more/toggle=44×44, attach=109×44, send/end=123×44 e send=115×44.
+- A onda de correção da revisão final acrescentou estados browser reais para bubbles queued/sent, attachments, warnings, menus, share e handoff. O teste calcula contraste a partir das cores computadas e exige >=4,5:1 para corpo, label, excerpt e anchor-kind; também exige 44×44px e zero overflow para controles representativos em 390×844 e 1024×768 com `pointer: coarse`. RED: `/tmp/lavish-task8-final-review-{red,target-red,anchor-kind-red}.log`; GREEN: `/tmp/lavish-task8-final-review-{green,focused-green}.log`.
+- Em `pointer: coarse`, a regra cobre qualquer `button` no chrome (mínimo 44×44), com dimensões explícitas para controles circulares e para o botão de remoção de attachment. O orçamento do composer só aumenta no breakpoint mobile, preservando a geometria curta de 375×548.
 - Sem gradiente, glow ou sombra de elevação observados. Foco e hierarquia permaneceram legíveis.
 - A paleta categórica `--c1..--c5` permaneceu byte-equivalente; nenhuma regra de chrome atravessa o iframe.
 - As fontes são distribuídas offline no pacote e atribuídas em `THIRD-PARTY-NOTICES.md`.
@@ -65,3 +67,4 @@ Hashes verificados:
 - O chevron vertical do drawer desktop pode ser lido de forma ambígua para uma abertura horizontal (P2, não bloqueante).
 - O estado compacto `○` de agent-not-listening tem nome acessível, mas poderia ganhar tooltip/explicação visual (P2, não bloqueante).
 - O relay usado pelo teste de live-reload é exclusivamente do fixture para contornar a limitação de input cross-origin/shadow do AXI 0.1.34; não muda o protocolo nem o produto.
+- Os dois P2 acima permanecem deliberadamente adiados; contraste de bubbles e contrato coarse-pointer não permanecem como limitações.

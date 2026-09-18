@@ -1143,6 +1143,9 @@ body.lavish {
 .bubble.user small {
   text-align: right;
 }
+.bubble.user:not(.queued) :is(small, .anchor) {
+  color: #000;
+}
 .bubble-text {
   white-space: pre-wrap;
 }
@@ -1161,6 +1164,10 @@ body.lavish {
 .bubble.queued {
   background: transparent;
   border-style: dashed;
+  color: var(--fg);
+}
+.bubble.user.queued :is(small, .anchor) {
+  color: var(--fg);
 }
 .bubble.queued small {
   display: flex;
@@ -1789,12 +1796,19 @@ body.layout-gate-active iframe#artifact {
     flex-direction: column;
   }
 }
-/* Physical controls stay compact for a mouse, but phones reserve a 44px hit area without
-   changing the visual token sizes inside them. Keep the sheet's composer budget in sync so the
-   taller send row cannot be clipped on a short visual viewport. */
+/* The phone sheet must reserve the taller send row before the coarse-pointer hit-area rules
+   below apply, otherwise a short visual viewport could clip the actions. */
 @media (max-width: 860px) and (pointer: coarse) {
   :root {
     --composer-action-h: 44px;
+  }
+}
+/* Coarse pointers keep the compact visual language while every interactive chrome control gets
+   a physical 44px target. This applies on tablets and touch laptops too, not just phone widths. */
+@media (pointer: coarse) {
+  button {
+    min-width: 44px;
+    min-height: 44px;
   }
   .annotate-switch {
     min-height: 44px;
@@ -1812,6 +1826,25 @@ body.layout-gate-active iframe#artifact {
   }
   .actions .button {
     min-height: 44px;
+  }
+  .warnings-button {
+    min-height: 44px;
+  }
+  .queued-remove,
+  .share-close {
+    width: 44px;
+    height: 44px;
+  }
+  .queued-remove {
+    flex: 0 0 44px;
+  }
+  .chat-attachment-chip button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 2px 4px;
   }
 }
 /* A phone on its side has no height to share: the raised sheet covers the bar as well (the sheet
