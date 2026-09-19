@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { on, once } from "node:events";
+import { EventEmitter, on, once } from "node:events";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
 import { connect as netConnect } from "node:net";
@@ -10,8 +10,8 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 import WebSocket from "ws";
 
-process.env.LAVISH_AXI_HOST = "127.0.0.1";
-process.env.LAVISH_AXI_LINK_HOST = "127.0.0.1";
+process.env.ATLAS_CORE_HOST = "127.0.0.1";
+process.env.ATLAS_CORE_LINK_HOST = "127.0.0.1";
 
 import {
   allowsAllHosts,
@@ -86,7 +86,7 @@ function flushMicrotasks() {
 }
 
 function chromeSessionData(html) {
-  const match = String(html).match(/<script id="lavish-session" type="application\/json">([\s\S]*?)<\/script>/);
+  const match = String(html).match(/<script id="atlas-session" type="application\/json">([\s\S]*?)<\/script>/);
   assert.ok(match);
   return JSON.parse(match[1]);
 }
@@ -141,7 +141,7 @@ test("server serves chrome browser behavior from a dedicated source file", async
   const html = createChromeHtml({ key: "abc", file: "/tmp/artifact.html" });
 
   assert.match(source, /chrome-client\.js/);
-  assert.match(html, /<script id="lavish-session" type="application\/json">/);
+  assert.match(html, /<script id="atlas-session" type="application\/json">/);
   assert.match(html, /<script src="\/chrome-client\.js"[^>]*><\/script>/);
   assert.doesNotMatch(html, /<script>\s*const key=/);
 });
@@ -253,7 +253,7 @@ test("the chrome boot failsafe turns the layout gate into a reloadable failure w
 
   // The failsafe must be armed BEFORE the external script tag: a request that hangs instead of
   // erroring blocks parsing, so anything after that tag would never be reached.
-  const failsafeIndex = boot.html.indexOf("__lavishCancelChromeBootFailsafe");
+  const failsafeIndex = boot.html.indexOf("__atlasCancelChromeBootFailsafe");
   const scriptIndex = boot.html.indexOf('<script src="/chrome-client.js"');
   assert.ok(failsafeIndex > -1);
   assert.ok(scriptIndex > failsafeIndex);
@@ -330,8 +330,8 @@ test("the chrome client cancels the boot failsafe once it has run", () => {
   const boot = bootChromeFailsafe();
   const gateCopy = boot.element("layoutGateCopy").textContent;
 
-  boot.context.window.__lavishChromeReady = true;
-  boot.context.window.__lavishCancelChromeBootFailsafe();
+  boot.context.window.__atlasChromeReady = true;
+  boot.context.window.__atlasCancelChromeBootFailsafe();
 
   assert.deepEqual(boot.pendingDelays(), [CHROME_LAYOUT_GATE_MAX_HOLD_MS]);
   boot.runTimers();
@@ -343,7 +343,7 @@ test("a boot failsafe that fires after the chrome client is ready changes nothin
   const boot = bootChromeFailsafe();
   const gateCopy = boot.element("layoutGateCopy").textContent;
 
-  boot.context.window.__lavishChromeReady = true;
+  boot.context.window.__atlasChromeReady = true;
   boot.runTimers();
 
   assert.equal(boot.element("layoutGateAction").textContent, "Show anyway");
@@ -480,15 +480,15 @@ test("export content disposition uses a safe fallback and encoded UTF-8 filename
 });
 
 test("artifact assets resolve within the artifact directory", async () => {
-  const root = path.resolve("/tmp/lavish-artifact");
+  const root = path.resolve("/tmp/atlas-artifact");
 
   assert.equal(await resolveArtifactAsset(root, "style.css"), path.join(root, "style.css"));
   assert.equal(await resolveArtifactAsset(root, "../secret.txt"), null);
 });
 
 test("artifact assets reject a symlink that escapes the artifact directory", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
-  const outside = await mkdtemp(path.join(tmpdir(), "lavish-outside-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
+  const outside = await mkdtemp(path.join(tmpdir(), "atlas-outside-"));
   try {
     const secret = path.join(outside, "secret.txt");
     await writeFile(secret, "outside-secret\n");
@@ -503,8 +503,8 @@ test("artifact assets reject a symlink that escapes the artifact directory", asy
 });
 
 test("artifact assets reject a path that escapes through an intermediate directory symlink", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
-  const outside = await mkdtemp(path.join(tmpdir(), "lavish-outside-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
+  const outside = await mkdtemp(path.join(tmpdir(), "atlas-outside-"));
   try {
     await writeFile(path.join(outside, "secret.txt"), "outside-secret\n");
     // The escaping link is a *directory* component, so the leaf name looks ordinary.
@@ -518,7 +518,7 @@ test("artifact assets reject a path that escapes through an intermediate directo
 });
 
 test("artifact assets still resolve a symlink that stays inside the artifact directory", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   try {
     const real = path.join(dir, "real.css");
     await writeFile(real, "body { color: rgb(1 2 3); }\n");
@@ -533,7 +533,7 @@ test("artifact assets still resolve a symlink that stays inside the artifact dir
 });
 
 test("artifact asset resolution fails closed when realpath errors", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   try {
     const linkA = path.join(dir, "loop-a");
     const linkB = path.join(dir, "loop-b");
@@ -556,7 +556,7 @@ test("artifact SDK uses a custom annotation card instead of browser prompts", ()
   const js = createSdkJs("abc");
 
   assert.doesNotMatch(js, /window\.prompt/);
-  assert.match(js, /lavish-annotation-card/);
+  assert.match(js, /atlas-annotation-card/);
   assert.match(js, /textarea/);
 });
 
@@ -566,20 +566,20 @@ test("artifact SDK script is valid JavaScript", () => {
   assert.doesNotThrow(() => new Function(js));
 });
 
-test("artifact SDK ignores Lavish-owned annotation UI", () => {
+test("artifact SDK ignores Atlas Core-owned annotation UI", () => {
   const js = createSdkJs("abc");
 
-  assert.match(js, /function isLavishUi/);
-  assert.match(js, /closest\(["']\[data-lavish-ui\]["']\)/);
-  assert.match(js, /data-lavish-ui/);
+  assert.match(js, /function isAtlasUi/);
+  assert.match(js, /closest\(["']\[data-atlas-ui\]["']\)/);
+  assert.match(js, /data-atlas-ui/);
 });
 
-test("artifact SDK isolates Lavish annotation UI in Shadow DOM", () => {
+test("artifact SDK isolates Atlas Core annotation UI in Shadow DOM", () => {
   const js = createSdkJs("abc");
 
   assert.match(js, /attachShadow\(\{\s*mode:\s*["']open["'],?\s*\}\)/);
   assert.match(js, /:host\{all:initial/);
-  assert.match(js, /lavish-annotation-root/);
+  assert.match(js, /atlas-annotation-root/);
 });
 
 test("annotation card does not block its own Queue button", () => {
@@ -654,7 +654,7 @@ test("annotation hover and click resolve to the same Mermaid node element", () =
 test("annotation mode forces the artifact cursor to default", () => {
   const js = createSdkJs("abc");
 
-  assert.match(js, /lavish-cursor-style/);
+  assert.match(js, /atlas-cursor-style/);
   assert.match(js, /cursor:default!important/);
   assert.match(js, /setAnnotationMode\(enabled\)/);
 });
@@ -666,12 +666,12 @@ test("artifact SDK registers a capture-phase document keydown listener for the m
   assert.match(js, /function isModeToggleHotkeyEvent\(event\)/);
   assert.match(js, /if \(!isModeToggleHotkeyEvent\(event\)\) return;/);
   assert.match(js, /function postArtifactMessage\(type,\s*payload\s*=\s*\{\}\)/);
-  assert.match(js, /postArtifactMessage\("lavish:toggleAnnotationMode"\)/);
+  assert.match(js, /postArtifactMessage\("atlas:toggleAnnotationMode"\)/);
   // Registered with the capture flag so it fires regardless of where focus is inside the
   // sandboxed artifact document, without a duplicate call sneaking in un-captured.
   assert.match(
     js,
-    /document\.addEventListener\(\s*"keydown",\s*\(event\) => \{\s*if \(!isModeToggleHotkeyEvent\(event\)\) return;\s*event\.preventDefault\(\);\s*postArtifactMessage\("lavish:toggleAnnotationMode"\);\s*\},\s*true,?\s*\);/,
+    /document\.addEventListener\(\s*"keydown",\s*\(event\) => \{\s*if \(!isModeToggleHotkeyEvent\(event\)\) return;\s*event\.preventDefault\(\);\s*postArtifactMessage\("atlas:toggleAnnotationMode"\);\s*\},\s*true,?\s*\);/,
   );
 });
 
@@ -686,7 +686,7 @@ test("chrome client toggles annotation mode via Cmd/Ctrl+I and on request from t
   assert.match(js, /function isModeToggleHotkeyEvent\(event\)/);
   assert.match(js, /function toggleAnnotationMode\(\)/);
   assert.match(js, /annotationSwitch\.onclick = toggleAnnotationMode;/);
-  assert.match(js, /if \(msg\.type === "lavish:toggleAnnotationMode"\) toggleAnnotationMode\(\);/);
+  assert.match(js, /if \(msg\.type === "atlas:toggleAnnotationMode"\) toggleAnnotationMode\(\);/);
   assert.match(
     js,
     /document\.addEventListener\(\s*"keydown",\s*\(event\) => \{\s*if \(!isModeToggleHotkeyEvent\(event\)\) return;\s*event\.preventDefault\(\);\s*toggleAnnotationMode\(\);\s*\},\s*true,?\s*\);/,
@@ -703,10 +703,10 @@ test("the annotate switch exposes the mode toggle hotkey as a discoverable toolt
 test("artifact SDK lets marked feedback controls handle their own clicks", () => {
   const js = createSdkJs("abc");
 
-  assert.match(js, /function isLavishAction/);
-  assert.match(js, /closest\(["']\[data-lavish-action\]["']\)/);
-  assert.match(js, /isLavishAction\(event\.target\)/);
-  assert.match(js, /\[data-lavish-action\],[^{}]*\[data-lavish-action\] \*\{cursor:pointer!important\}/);
+  assert.match(js, /function isAtlasAction/);
+  assert.match(js, /closest\(["']\[data-atlas-action\]["']\)/);
+  assert.match(js, /isAtlasAction\(event\.target\)/);
+  assert.match(js, /\[data-atlas-action\],[^{}]*\[data-atlas-action\] \*\{cursor:pointer!important\}/);
 });
 
 test("artifact SDK lets native form controls handle their own clicks", () => {
@@ -758,7 +758,7 @@ test("annotation card title renders selected tag as an html element name", () =>
   assert.match(js, /"Annotate &lt;" \+ c\.tag \+ "&gt;"/);
 });
 
-test("annotation card shadow styles use Lavish design-system variables", () => {
+test("annotation card shadow styles use Atlas Core design-system variables", () => {
   const js = createSdkJs("abc");
 
   assert.match(js, /--ink-900:#0f1115/);
@@ -787,7 +787,7 @@ test("annotate switch shows an activity track and ink knob when enabled", async 
   assert.match(js, /annotationSwitch\.setAttribute\("aria-pressed", String\(annotation\)\)/);
 });
 
-test("chrome declares the Lavish design-system tokens", async () => {
+test("chrome declares the Atlas Core design-system tokens", async () => {
   const css = await chromeCssSource();
 
   assert.match(css, /--void:#000/);
@@ -813,10 +813,10 @@ test("chrome declares the Lavish design-system tokens", async () => {
 test("artifact SDK uses design-token aliases for annotation highlight and shadow UI", () => {
   const js = createSdkJs("abc");
 
-  assert.match(js, /--lavish-accent:#f4c95d/);
-  assert.match(js, /--lavish-annotate-outline:2px solid var\(--lavish-accent\)/);
-  assert.match(js, /el\.style\.outline\s*=\s*["']var\(--lavish-annotate-outline,2px solid #f4c95d\)["']/);
-  assert.match(js, /el\.style\.outlineOffset\s*=\s*["']var\(--lavish-annotate-offset,2px\)["']/);
+  assert.match(js, /--atlas-accent:#f4c95d/);
+  assert.match(js, /--atlas-annotate-outline:2px solid var\(--atlas-accent\)/);
+  assert.match(js, /el\.style\.outline\s*=\s*["']var\(--atlas-annotate-outline,2px solid #f4c95d\)["']/);
+  assert.match(js, /el\.style\.outlineOffset\s*=\s*["']var\(--atlas-annotate-offset,2px\)["']/);
   assert.match(js, /--fg-faint:var\(--steel-300\)/);
   assert.match(js, /textarea::placeholder\{color:var\(--fg-faint\)\}/);
   assert.doesNotMatch(js, /placeholder\{color:#aeb6c6\}/);
@@ -857,7 +857,7 @@ test("chrome top bar follows the design mock wordmark and overflow menu treatmen
   const html = createChromeHtml({ key: "abc", file: "/tmp/artifact.html" });
   const css = await chromeCssSource();
 
-  assert.match(html, /class="brand-mark">Lavish/);
+  assert.match(html, /class="brand-mark">Atlas Core/);
   assert.match(html, /class="brand-support">Editor/);
   assert.match(css, /font-family:var\(--font-serif\)/);
   assert.match(css, /letter-spacing:\.18em/);
@@ -954,7 +954,7 @@ test("overflow menu offers publishing an ht-ml.app link via a share dialog", asy
     html,
     /Publish to <a class="share-link" href="https:\/\/ht-ml\.app" target="_blank" rel="noopener noreferrer">ht-ml\.app<\/a>/,
   );
-  assert.match(html, /third-party hosting service, not part of Lavish/);
+  assert.match(html, /third-party hosting service, not part of Atlas Core/);
   assert.match(html, /id="sharePassword"/);
   assert.match(html, /id="shareUpdateKey"/);
   assert.match(html, /Without a password, the page is PUBLIC/);
@@ -992,7 +992,7 @@ test("the share dialog hands back the site id alongside the update key it tells 
   // command as a way to lock a page - only --private sets one.
   assert.match(
     html,
-    /Republish this page&#39;s HTML with <code>lavish-axi share &lt;file&gt; --site &lt;site id&gt; --update-key &lt;key&gt;<\/code>/,
+    /Republish this page&#39;s HTML with <code>atlas-core share &lt;file&gt; --site &lt;site id&gt; --update-key &lt;key&gt;<\/code>/,
   );
   assert.match(html, /add <code>--private<\/code> to also lock it/);
   assert.doesNotMatch(html, /Republish or lock this page/);
@@ -1169,7 +1169,7 @@ test("artifact SDK reports only stable severe layout failures after fonts, resiz
   assert.match(js, /document\.readyState === "complete" && domHydrationQuiescent/);
   assert.match(js, /isAnimationAssociatedWithElement/);
   assert.match(js, /findStableLayoutFindings/);
-  assert.match(js, /postArtifactMessage\(["']lavish:layoutDiagnostics["']/);
+  assert.match(js, /postArtifactMessage\(["']atlas:layoutDiagnostics["']/);
   assert.match(js, /target_presence_complete/);
   assert.match(js, /page-horizontal-overflow/);
   assert.match(js, /clipped-text/);
@@ -1215,10 +1215,10 @@ test("artifact SDK reports its scroll position and restores it on request", () =
   const js = createSdkJs("abc");
 
   assert.match(js, /addEventListener\(\s*["']scroll["']/);
-  assert.match(js, /postArtifactMessage\(["']lavish:scroll["']/);
+  assert.match(js, /postArtifactMessage\(["']atlas:scroll["']/);
   assert.match(js, /window\.scrollX/);
   assert.match(js, /window\.scrollY/);
-  assert.match(js, /msg\.type === ["']lavish:restoreScroll["']/);
+  assert.match(js, /msg\.type === ["']atlas:restoreScroll["']/);
   assert.match(js, /window\.scrollTo\(/);
 });
 
@@ -1226,12 +1226,12 @@ test("chrome remembers the artifact scroll position across reloads", async () =>
   const js = await chromeClientSource();
 
   assert.match(js, /let lastScroll = \{ x: 0, y: 0 \}/);
-  assert.match(js, /msg\.type === ["']lavish:scroll["']/);
-  assert.match(js, /type:\s*["']lavish:restoreScroll["']/);
+  assert.match(js, /msg\.type === ["']atlas:scroll["']/);
+  assert.match(js, /type:\s*["']atlas:restoreScroll["']/);
   assert.match(js, /x:\s*lastScroll\.x,\s*y:\s*lastScroll\.y/);
 });
 
-test("chrome ignores Lavish postMessages not sent by the artifact iframe", async () => {
+test("chrome ignores Atlas Core postMessages not sent by the artifact iframe", async () => {
   const js = await chromeClientSource();
 
   assert.match(js, /event\.source\s*!==\s*frame\.contentWindow/);
@@ -1240,7 +1240,7 @@ test("chrome ignores Lavish postMessages not sent by the artifact iframe", async
 test("chrome restores queued prompts from tab storage after reload", async () => {
   const js = await chromeClientSource();
 
-  assert.match(js, /lavish-axi:queued:/);
+  assert.match(js, /atlas-core:queued:/);
   assert.match(js, /function loadQueuedPrompts\(\)/);
   assert.match(js, /const queued = loadQueuedPrompts\(\)/);
   assert.match(js, /sessionStorage\.getItem\(queueStorageKey\)/);
@@ -1258,7 +1258,7 @@ test("chrome keeps queued prompts persisted until submit succeeds", async () => 
 });
 
 test("/health reports the server version so clients can detect upgrades", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
     const res = await fetch(`http://127.0.0.1:${server.port}/health`);
@@ -1272,7 +1272,7 @@ test("/health reports the server version so clients can detect upgrades", async 
 });
 
 test("session URLs use the same IPv4 loopback host the server binds", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({
@@ -1307,7 +1307,7 @@ function availableConcreteIpv4() {
 }
 
 test("resolved all-interfaces aliases are rejected before listening", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-wildcard-alias-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-wildcard-alias-"));
   try {
     for (const alias of ["0", "0x00000000"]) {
       await assert.rejects(
@@ -1316,7 +1316,7 @@ test("resolved all-interfaces aliases are rejected before listening", async () =
             port: 0,
             stateFile: path.join(dir, `${alias}.json`),
             version: "9.9.9-test",
-            env: { LAVISH_AXI_HOST: alias },
+            env: { ATLAS_CORE_HOST: alias },
             detectTailscale: async () => null,
             lookupHost: async () => [{ address: "0.0.0.0", family: 4 }],
             idleTimeoutMs: null,
@@ -1330,13 +1330,13 @@ test("resolved all-interfaces aliases are rejected before listening", async () =
 });
 
 test("an explicit bind host overrides automatic Tailscale detection", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-explicit-host-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-explicit-host-"));
   let detections = 0;
   const server = await serve({
     port: 0,
     stateFile: path.join(dir, "state.json"),
     version: "9.9.9-test",
-    env: { LAVISH_AXI_HOST: "127.0.0.1" },
+    env: { ATLAS_CORE_HOST: "127.0.0.1" },
     detectTailscale: async () => {
       detections += 1;
       return { ipv4: "100.64.12.34", magicDnsName: "review.tailnet.ts.net" };
@@ -1355,7 +1355,7 @@ test("an explicit bind host overrides automatic Tailscale detection", async () =
 });
 
 test("a down Tailscale detector keeps the server loopback-only without a phone link", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-no-tailscale-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-no-tailscale-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body>review</body></html>");
   const server = await serve({
@@ -1392,7 +1392,7 @@ test("a down Tailscale detector keeps the server loopback-only without a phone l
 });
 
 test("network reconciliation coalesces concurrent checks and briefly caches the result", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-tailscale-reconcile-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-tailscale-reconcile-"));
   let detected = null;
   let detectionCalls = 0;
   const server = await serve({
@@ -1436,7 +1436,7 @@ test("network reconciliation coalesces concurrent checks and briefly caches the 
 });
 
 test("reconciliation distinguishes incomplete Tailscale from down state", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-tailscale-incomplete-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-tailscale-incomplete-"));
   /** @type {any} */
   let detected = {
     ipv4: null,
@@ -1466,7 +1466,7 @@ test("reconciliation distinguishes incomplete Tailscale from down state", async 
 });
 
 test("a failed Tailscale listener warns and falls back without advertising MagicDNS", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-tailscale-bind-fallback-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-tailscale-bind-fallback-"));
   const artifact = path.join(dir, "artifact.html");
   const logs = [];
   await writeFile(artifact, "<!doctype html><html><body>review</body></html>");
@@ -1514,7 +1514,7 @@ test("Tailscale mode binds concrete listeners, serves the MagicDNS link, and tea
     t.skip("host has no non-loopback IPv4 address for the second listener");
     return;
   }
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-tailscale-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-tailscale-"));
   const magicDnsName = "review-phone.example.ts.net";
   const server = await serve({
     port: 0,
@@ -1568,7 +1568,7 @@ test("Tailscale mode binds concrete listeners, serves the MagicDNS link, and tea
       headers: { accept: "text/html" },
     });
     assert.equal(landing.status, 200);
-    assert.match(landing.body, /Lavish Editor is running/);
+    assert.match(landing.body, /Atlas Core is running/);
 
     const shutdown = await rawRequest(server.port, "/shutdown", {
       method: "POST",
@@ -1602,7 +1602,7 @@ function connectTo(host, port) {
 }
 
 test("session URLs use the configured linkHost while binding to loopback", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({
@@ -1628,7 +1628,7 @@ test("session URLs use the configured linkHost while binding to loopback", async
 });
 
 test("session URLs can disable the layout gate for one open", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -1642,7 +1642,7 @@ test("session URLs can disable the layout gate for one open", async () => {
 
     assert.match(body.url, /[?&]no-gate=1/);
     const chrome = await (await fetch(body.url)).text();
-    assert.match(chrome, /<body class="lavish">/);
+    assert.match(chrome, /<body class="atlas">/);
     assert.match(chrome, /id="layoutGateOverlay" hidden/);
     assert.match(chrome, /"layoutGateEnabled":false/);
   } finally {
@@ -1680,7 +1680,7 @@ function rawRequest(port, pathname, { method = "GET", host, headers = {}, body }
 }
 
 test("loopback server rejects forged non-loopback Host headers (DNS rebinding)", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>top secret</h1></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -1748,7 +1748,7 @@ test("loopback server rejects forged non-loopback Host headers (DNS rebinding)",
 // learned the (path-derived, non-secret) session key could inject prompts the
 // agent then received as the reviewer's own instructions.
 test("POST /api/:key/prompts rejects non-same-origin callers and queues nothing", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>hi</h1></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -1805,7 +1805,7 @@ test("POST /api/:key/prompts rejects non-same-origin callers and queues nothing"
 });
 
 test("proxied same-origin prompt submissions use only an allowlisted forwarded origin", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>hi</h1></body></html>");
   const server = await serve({
@@ -1875,7 +1875,7 @@ test("proxied same-origin prompt submissions use only an allowlisted forwarded o
 });
 
 test("wildcard hosts accept proxied prompts but still reject malformed authorities", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>hi</h1></body></html>");
   const server = await serve({
@@ -1937,7 +1937,7 @@ test("wildcard hosts accept proxied prompts but still reject malformed authoriti
 // Regression: with no framing headers an attacker page could frame the chrome
 // to obtain a window handle to it (and a clickjacking surface over Send).
 test("the session chrome page refuses to be framed", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>hi</h1></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -1967,7 +1967,7 @@ test("the session chrome page refuses to be framed", async () => {
 });
 
 test("loopback server honors the configured link host but still rejects others", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({
     port: 0,
     stateFile: path.join(dir, "state.json"),
@@ -1991,7 +1991,7 @@ test("loopback server honors the configured link host but still rejects others",
 });
 
 test("server allows explicitly configured extra hosts and still rejects others", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({
     port: 0,
     stateFile: path.join(dir, "state.json"),
@@ -2014,7 +2014,7 @@ test("server allows explicitly configured extra hosts and still rejects others",
 });
 
 test("server validates X-Forwarded-Host so it works behind a reverse proxy", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({
     port: 0,
     stateFile: path.join(dir, "state.json"),
@@ -2066,7 +2066,7 @@ test("server validates X-Forwarded-Host so it works behind a reverse proxy", asy
 });
 
 test("a '*' entry in allowedHosts disables the Host guard entirely", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({
     port: 0,
     stateFile: path.join(dir, "state.json"),
@@ -2179,7 +2179,7 @@ test("allowsAllHosts detects the '*' opt-out sentinel", () => {
 });
 
 test("serve rejects fast when the bind host is unavailable", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   try {
     await assert.rejects(
       serve({
@@ -2199,8 +2199,8 @@ test("serve rejects fast when the bind host is unavailable", async () => {
 });
 
 test("/artifact serves files copied under the artifact directory", async () => {
-  const parent = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
-  const dir = path.join(parent, ".lavish");
+  const parent = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
+  const dir = path.join(parent, ".atlas");
   const assetDir = path.join(dir, "assets");
   const artifact = path.join(dir, "artifact.html");
   await mkdir(dir);
@@ -2250,9 +2250,9 @@ test("/artifact serves files copied under the artifact directory", async () => {
 });
 
 test("/artifact refuses to serve a symlink that escapes the artifact directory", async () => {
-  const parent = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
-  const outside = await mkdtemp(path.join(tmpdir(), "lavish-outside-"));
-  const dir = path.join(parent, ".lavish");
+  const parent = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
+  const outside = await mkdtemp(path.join(tmpdir(), "atlas-outside-"));
+  const dir = path.join(parent, ".atlas");
   const artifact = path.join(dir, "artifact.html");
   await mkdir(dir);
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -2280,9 +2280,9 @@ test("/artifact refuses to serve a symlink that escapes the artifact directory",
 });
 
 test("/artifact refuses a path that escapes through an intermediate directory symlink", async () => {
-  const parent = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
-  const outside = await mkdtemp(path.join(tmpdir(), "lavish-outside-"));
-  const dir = path.join(parent, ".lavish");
+  const parent = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
+  const outside = await mkdtemp(path.join(tmpdir(), "atlas-outside-"));
+  const dir = path.join(parent, ".atlas");
   const artifact = path.join(dir, "artifact.html");
   await mkdir(dir);
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -2312,8 +2312,8 @@ test("/artifact refuses a path that escapes through an intermediate directory sy
 // `..` in a URL before it ever reaches the wire - only a raw request proves the server itself
 // still rejects the traversal.
 test("/artifact still rejects lexical .. traversal that reaches the server unnormalized", async () => {
-  const parent = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
-  const dir = path.join(parent, ".lavish");
+  const parent = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
+  const dir = path.join(parent, ".atlas");
   const artifact = path.join(dir, "artifact.html");
   await mkdir(dir);
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -2339,8 +2339,8 @@ test("/artifact still rejects lexical .. traversal that reaches the server unnor
 });
 
 test("/whiteboard-assets refuses escaping symlinks and .. traversal but still serves its bundle", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
-  const outside = await mkdtemp(path.join(tmpdir(), "lavish-outside-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
+  const outside = await mkdtemp(path.join(tmpdir(), "atlas-outside-"));
   const assetsDir = path.join(dir, "whiteboard-assets");
   await mkdir(assetsDir);
   await writeFile(path.join(assetsDir, "whiteboard.js"), "// fake bundle\n");
@@ -2373,7 +2373,7 @@ test("/whiteboard-assets refuses escaping symlinks and .. traversal but still se
 });
 
 test("detected layout warnings leave the long-poll pending and never wake an agent", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2422,7 +2422,7 @@ test("detected layout warnings leave the long-poll pending and never wake an age
 });
 
 test("queueing selected warnings wakes the poll as one ordinary prompt", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2501,7 +2501,7 @@ test("queueing selected warnings wakes the poll as one ordinary prompt", async (
 });
 
 test("warning-only layout observations never enter the inbox", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2540,7 +2540,7 @@ test("warning-only layout observations never enter the inbox", async () => {
 });
 
 test("a fatal artifact failure still wakes the poll without user action", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2578,7 +2578,7 @@ test("a fatal artifact failure still wakes the poll without user action", async 
 });
 
 test("the artifact revision advances on each begun artifact load", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2611,7 +2611,7 @@ test("the artifact revision advances on each begun artifact load", async () => {
 });
 
 test("the artifact availability probe does not advance the artifact revision", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2639,7 +2639,7 @@ test("the artifact availability probe does not advance the artifact revision", a
 });
 
 test("an older overlapping begin request cannot replace the current epoch", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2679,7 +2679,7 @@ test("an older overlapping begin request cannot replace the current epoch", asyn
 });
 
 test("begin-load requires the current chrome handoff before any first or direct load", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>direct</h1></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2727,7 +2727,7 @@ test("begin-load requires the current chrome handoff before any first or direct 
 });
 
 test("reopening a session preserves the existing chrome handoff and artifact load", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>reopen</h1></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2773,7 +2773,7 @@ test("reopening a session preserves the existing chrome handoff and artifact loa
 });
 
 test("same-origin chrome handoff recovery issues a usable reviewer token", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2809,7 +2809,7 @@ test("same-origin chrome handoff recovery issues a usable reviewer token", async
 });
 
 test("a refreshed chrome receives a new handoff and establishes the newest load", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const stateFile = path.join(dir, "state.json");
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -2879,7 +2879,7 @@ test("a refreshed chrome receives a new handoff and establishes the newest load"
 });
 
 test("a newer begun load fences stale document and artifact mutations", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2954,7 +2954,7 @@ test("a newer begun load fences stale document and artifact mutations", async ()
 });
 
 test("stale diagnostic passes are ignored after a newer artifact load", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -2996,7 +2996,7 @@ test("stale diagnostic passes are ignored after a newer artifact load", async ()
 });
 
 test("stale layout prompts return a conflict without entering feedback", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -3065,7 +3065,7 @@ test("stale layout prompts return a conflict without entering feedback", async (
 });
 
 test("a newer complete matching-viewport pass resolves a warning and a different viewport cannot", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -3128,7 +3128,7 @@ test("a newer complete matching-viewport pass resolves a warning and a different
 });
 
 test("the chrome bootstraps the inbox so it survives a browser refresh", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -3165,7 +3165,7 @@ test("the chrome bootstraps the inbox so it survives a browser refresh", async (
 });
 
 test("long-poll sends heartbeat bytes before feedback arrives", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({
@@ -3213,7 +3213,7 @@ test("long-poll sends heartbeat bytes before feedback arrives", async () => {
 });
 
 test("/chrome-client.js serves the extracted chrome client script", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
     const res = await fetch(`http://127.0.0.1:${server.port}/chrome-client.js`);
@@ -3229,7 +3229,7 @@ test("/chrome-client.js serves the extracted chrome client script", async () => 
 });
 
 test("event WebSocket preserves initial state and named live-event semantics", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -3277,7 +3277,7 @@ test("event WebSocket preserves initial state and named live-event semantics", a
 });
 
 test("event WebSocket rejects foreign and missing browser origins", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
     const base = `http://127.0.0.1:${server.port}`;
@@ -3303,7 +3303,7 @@ test("event WebSocket rejects foreign and missing browser origins", async () => 
 });
 
 test("event WebSocket validates a reverse proxy's forwarded origin", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({
     port: 0,
     stateFile: path.join(dir, "state.json"),
@@ -3335,7 +3335,7 @@ test("event WebSocket validates a reverse proxy's forwarded origin", async () =>
 });
 
 test("/chrome.css serves the extracted chrome stylesheet", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
     const res = await fetch(`http://127.0.0.1:${server.port}/chrome.css`);
@@ -3351,7 +3351,7 @@ test("/chrome.css serves the extracted chrome stylesheet", async () => {
 });
 
 test("/chrome-fonts serves vendored application fonts and rejects unknown assets", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-fonts-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-fonts-"));
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
     const base = `http://127.0.0.1:${server.port}`;
@@ -3374,7 +3374,7 @@ test("/chrome-fonts serves vendored application fonts and rejects unknown assets
 });
 
 test("/design serves local Tailwind and DaisyUI artifact assets", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
     const base = `http://127.0.0.1:${server.port}`;
@@ -3403,7 +3403,7 @@ test("design asset resolver only trusts exact packaged design asset paths", () =
 });
 
 test("GET /api/:key/export inlines local assets and leaves remote references intact", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(
     artifact,
@@ -3446,7 +3446,7 @@ test("GET /api/:key/export inlines local assets and leaves remote references int
 });
 
 test("GET /api/:key/export sends a safe download filename header", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "résumé draft.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>Hi</h1></body></html>");
 
@@ -3474,7 +3474,7 @@ test("GET /api/:key/export sends a safe download filename header", async () => {
 });
 
 test("GET /api/:key/export reports unresolved local asset warning count", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, '<!doctype html><html><body><img src="missing.png"></body></html>');
 
@@ -3492,9 +3492,9 @@ test("GET /api/:key/export reports unresolved local asset warning count", async 
     const body = await exportRes.text();
 
     assert.equal(exportRes.status, 200);
-    assert.equal(exportRes.headers.get("x-lavish-export-warning-count"), "1");
-    assert.equal(exportRes.headers.get("x-lavish-export-notice-count"), "0");
-    assert.equal(exportRes.headers.get("x-lavish-export-warnings"), null);
+    assert.equal(exportRes.headers.get("x-atlas-export-warning-count"), "1");
+    assert.equal(exportRes.headers.get("x-atlas-export-notice-count"), "0");
+    assert.equal(exportRes.headers.get("x-atlas-export-warnings"), null);
     assert.match(body, /<img src="missing\.png">/);
   } finally {
     await server.close();
@@ -3503,7 +3503,7 @@ test("GET /api/:key/export reports unresolved local asset warning count", async 
 });
 
 test("GET /api/:key/export counts notices separately from unresolved assets", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(
     artifact,
@@ -3524,8 +3524,8 @@ test("GET /api/:key/export counts notices separately from unresolved assets", as
     const body = await exportRes.text();
 
     assert.equal(exportRes.status, 200);
-    assert.equal(exportRes.headers.get("x-lavish-export-warning-count"), "0");
-    assert.equal(exportRes.headers.get("x-lavish-export-notice-count"), "1");
+    assert.equal(exportRes.headers.get("x-atlas-export-warning-count"), "0");
+    assert.equal(exportRes.headers.get("x-atlas-export-notice-count"), "1");
     assert.match(body, /Content-Security-Policy/);
   } finally {
     await server.close();
@@ -3534,7 +3534,7 @@ test("GET /api/:key/export counts notices separately from unresolved assets", as
 });
 
 test("GET /api/:key/export returns 404 for an unknown session", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
     const res = await fetch(`http://127.0.0.1:${server.port}/api/does-not-exist/export`);
@@ -3546,7 +3546,7 @@ test("GET /api/:key/export returns 404 for an unknown session", async () => {
 });
 
 test("POST /api/:key/share publishes the local-inlined artifact to ht-ml.app", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(
     artifact,
@@ -3558,8 +3558,8 @@ test("POST /api/:key/share publishes the local-inlined artifact to ht-ml.app", a
 
   const requests = [];
   const htmlApp = await startFakeHtmlApp(requests);
-  const previousApiUrl = process.env.LAVISH_AXI_HTML_APP_API_URL;
-  process.env.LAVISH_AXI_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
+  const previousApiUrl = process.env.ATLAS_CORE_HTML_APP_API_URL;
+  process.env.ATLAS_CORE_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
 
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
@@ -3596,20 +3596,20 @@ test("POST /api/:key/share publishes the local-inlined artifact to ht-ml.app", a
   } finally {
     await server.close();
     await htmlApp.close();
-    restoreEnv("LAVISH_AXI_HTML_APP_API_URL", previousApiUrl);
+    restoreEnv("ATLAS_CORE_HTML_APP_API_URL", previousApiUrl);
     await rm(dir, { recursive: true, force: true });
   }
 });
 
 test("POST /api/:key/share generates a password on request and hands it back once", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>Ship</h1></body></html>");
 
   const requests = [];
   const htmlApp = await startFakeHtmlApp(requests);
-  const previousApiUrl = process.env.LAVISH_AXI_HTML_APP_API_URL;
-  process.env.LAVISH_AXI_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
+  const previousApiUrl = process.env.ATLAS_CORE_HTML_APP_API_URL;
+  process.env.ATLAS_CORE_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
 
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
@@ -3634,7 +3634,7 @@ test("POST /api/:key/share generates a password on request and hands it back onc
   } finally {
     await server.close();
     await htmlApp.close();
-    restoreEnv("LAVISH_AXI_HTML_APP_API_URL", previousApiUrl);
+    restoreEnv("ATLAS_CORE_HTML_APP_API_URL", previousApiUrl);
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -3659,8 +3659,8 @@ async function publishThroughShareRoute(dir, status, body) {
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>Ship</h1></body></html>");
   const htmlApp = await startFailingHtmlApp(status);
-  const previousApiUrl = process.env.LAVISH_AXI_HTML_APP_API_URL;
-  process.env.LAVISH_AXI_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
+  const previousApiUrl = process.env.ATLAS_CORE_HTML_APP_API_URL;
+  process.env.ATLAS_CORE_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
     const base = `http://127.0.0.1:${server.port}`;
@@ -3679,12 +3679,12 @@ async function publishThroughShareRoute(dir, status, body) {
   } finally {
     await server.close();
     await htmlApp.close();
-    restoreEnv("LAVISH_AXI_HTML_APP_API_URL", previousApiUrl);
+    restoreEnv("ATLAS_CORE_HTML_APP_API_URL", previousApiUrl);
   }
 }
 
 test("POST /api/:key/share reports an indeterminate publish and keeps the password it minted", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   try {
     // A 5xx can follow a POST the origin already committed. The password was minted for THIS
     // request, so discarding it with the failed response would leave the page live behind a secret
@@ -3707,17 +3707,17 @@ test("POST /api/:key/share reports an indeterminate publish and keeps the passwo
 });
 
 test("POST /api/:key/share reports an incomplete 200 as published, not as an unknown outcome", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>Ship</h1></body></html>");
 
   // The host answered 200, so the page landed. Classifying it as indeterminate contradicted the
-  // error text beside it AND dropped the url Lavish was holding for a page that is public by
+  // error text beside it AND dropped the url Atlas Core was holding for a page that is public by
   // default and, without the update_key, unmanageable forever.
   const requests = [];
   const htmlApp = await startFakeHtmlApp(requests, { site_id: "abc123", url: "https://abc123.ht-ml.app/" });
-  const previousApiUrl = process.env.LAVISH_AXI_HTML_APP_API_URL;
-  process.env.LAVISH_AXI_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
+  const previousApiUrl = process.env.ATLAS_CORE_HTML_APP_API_URL;
+  process.env.ATLAS_CORE_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
 
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
@@ -3744,13 +3744,13 @@ test("POST /api/:key/share reports an incomplete 200 as published, not as an unk
   } finally {
     await server.close();
     await htmlApp.close();
-    restoreEnv("LAVISH_AXI_HTML_APP_API_URL", previousApiUrl);
+    restoreEnv("ATLAS_CORE_HTML_APP_API_URL", previousApiUrl);
     await rm(dir, { recursive: true, force: true });
   }
 });
 
 test("POST /api/:key/share reports a host rejection as a plain failure with no password", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   try {
     // The host answered, so nothing was published: a minted password gates nothing and relaying it
     // would send the user chasing a page that does not exist.
@@ -3767,14 +3767,14 @@ test("POST /api/:key/share reports a host rejection as a plain failure with no p
 });
 
 test("POST /api/:key/share never echoes a password the user typed", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body><h1>Ship</h1></body></html>");
 
   const requests = [];
   const htmlApp = await startFakeHtmlApp(requests);
-  const previousApiUrl = process.env.LAVISH_AXI_HTML_APP_API_URL;
-  process.env.LAVISH_AXI_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
+  const previousApiUrl = process.env.ATLAS_CORE_HTML_APP_API_URL;
+  process.env.ATLAS_CORE_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
 
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
@@ -3798,20 +3798,20 @@ test("POST /api/:key/share never echoes a password the user typed", async () => 
   } finally {
     await server.close();
     await htmlApp.close();
-    restoreEnv("LAVISH_AXI_HTML_APP_API_URL", previousApiUrl);
+    restoreEnv("ATLAS_CORE_HTML_APP_API_URL", previousApiUrl);
     await rm(dir, { recursive: true, force: true });
   }
 });
 
 test("POST /api/:key/share returns unresolved local asset warnings", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, '<!doctype html><html><body><img src="missing.png"><h1>Ship</h1></body></html>');
 
   const requests = [];
   const htmlApp = await startFakeHtmlApp(requests);
-  const previousApiUrl = process.env.LAVISH_AXI_HTML_APP_API_URL;
-  process.env.LAVISH_AXI_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
+  const previousApiUrl = process.env.ATLAS_CORE_HTML_APP_API_URL;
+  process.env.ATLAS_CORE_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
 
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
@@ -3843,13 +3843,13 @@ test("POST /api/:key/share returns unresolved local asset warnings", async () =>
   } finally {
     await server.close();
     await htmlApp.close();
-    restoreEnv("LAVISH_AXI_HTML_APP_API_URL", previousApiUrl);
+    restoreEnv("ATLAS_CORE_HTML_APP_API_URL", previousApiUrl);
     await rm(dir, { recursive: true, force: true });
   }
 });
 
 test("mutating routes reject a present foreign Origin while allowing same-origin and header-less callers", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -3919,14 +3919,14 @@ test("mutating routes reject a present foreign Origin while allowing same-origin
 });
 
 test("POST /api/:key/share rejects cross-origin browser requests", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><title>x</title><h1>Private</h1>\n");
 
   const requests = [];
   const htmlApp = await startFakeHtmlApp(requests);
-  const previousApiUrl = process.env.LAVISH_AXI_HTML_APP_API_URL;
-  process.env.LAVISH_AXI_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
+  const previousApiUrl = process.env.ATLAS_CORE_HTML_APP_API_URL;
+  process.env.ATLAS_CORE_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
 
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
@@ -3954,20 +3954,20 @@ test("POST /api/:key/share rejects cross-origin browser requests", async () => {
   } finally {
     await server.close();
     await htmlApp.close();
-    restoreEnv("LAVISH_AXI_HTML_APP_API_URL", previousApiUrl);
+    restoreEnv("ATLAS_CORE_HTML_APP_API_URL", previousApiUrl);
     await rm(dir, { recursive: true, force: true });
   }
 });
 
 test("POST /api/:key/share rejects requests without provenance headers", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><title>x</title><h1>Private</h1>\n");
 
   const requests = [];
   const htmlApp = await startFakeHtmlApp(requests);
-  const previousApiUrl = process.env.LAVISH_AXI_HTML_APP_API_URL;
-  process.env.LAVISH_AXI_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
+  const previousApiUrl = process.env.ATLAS_CORE_HTML_APP_API_URL;
+  process.env.ATLAS_CORE_HTML_APP_API_URL = `http://127.0.0.1:${htmlApp.port}`;
 
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
@@ -3992,13 +3992,13 @@ test("POST /api/:key/share rejects requests without provenance headers", async (
   } finally {
     await server.close();
     await htmlApp.close();
-    restoreEnv("LAVISH_AXI_HTML_APP_API_URL", previousApiUrl);
+    restoreEnv("ATLAS_CORE_HTML_APP_API_URL", previousApiUrl);
     await rm(dir, { recursive: true, force: true });
   }
 });
 
 test("POST /shutdown stops the listener so the client can spawn a fresh server", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
     const res = await fetch(`http://127.0.0.1:${server.port}/shutdown`, { method: "POST" });
@@ -4015,7 +4015,7 @@ for (const initializeFailure of [false, true]) {
     `${initializeFailure ? "initialization failure" : "shutdown"} terminates an event WebSocket that ignores the close handshake`,
     { timeout: 5000 },
     async () => {
-      const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+      const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
       const stateFile = path.join(dir, "state.json");
       if (initializeFailure) await writeFile(stateFile, "invalid json");
       const server = await serve({ port: 0, stateFile, version: "9.9.9-test" });
@@ -4086,7 +4086,7 @@ async function collectEventStream(base, key) {
 }
 
 async function openShutdownBroadcastServer() {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const opened = path.join(dir, "opened.html");
   const other = path.join(dir, "other.html");
   await writeFile(opened, "<!doctype html><html><body>opened</body></html>");
@@ -4202,13 +4202,13 @@ test("a shutdown that names no reason claims none", async () => {
 
 test("resolveIdleTimeoutMs defaults, parses, and only explicit opt-outs disable", () => {
   assert.equal(resolveIdleTimeoutMs({}), 30 * 60_000);
-  assert.equal(resolveIdleTimeoutMs({ LAVISH_AXI_IDLE_TIMEOUT_MS: "" }), 30 * 60_000);
-  assert.equal(resolveIdleTimeoutMs({ LAVISH_AXI_IDLE_TIMEOUT_MS: "5000" }), 5000);
-  assert.equal(resolveIdleTimeoutMs({ LAVISH_AXI_IDLE_TIMEOUT_MS: "0" }), null);
-  assert.equal(resolveIdleTimeoutMs({ LAVISH_AXI_IDLE_TIMEOUT_MS: "off" }), null);
-  assert.equal(resolveIdleTimeoutMs({ LAVISH_AXI_IDLE_TIMEOUT_MS: "-1" }), 30 * 60_000);
-  assert.equal(resolveIdleTimeoutMs({ LAVISH_AXI_IDLE_TIMEOUT_MS: "30000ms" }), 30 * 60_000);
-  assert.equal(resolveIdleTimeoutMs({ LAVISH_AXI_IDLE_TIMEOUT_MS: "later" }), 30 * 60_000);
+  assert.equal(resolveIdleTimeoutMs({ ATLAS_CORE_IDLE_TIMEOUT_MS: "" }), 30 * 60_000);
+  assert.equal(resolveIdleTimeoutMs({ ATLAS_CORE_IDLE_TIMEOUT_MS: "5000" }), 5000);
+  assert.equal(resolveIdleTimeoutMs({ ATLAS_CORE_IDLE_TIMEOUT_MS: "0" }), null);
+  assert.equal(resolveIdleTimeoutMs({ ATLAS_CORE_IDLE_TIMEOUT_MS: "off" }), null);
+  assert.equal(resolveIdleTimeoutMs({ ATLAS_CORE_IDLE_TIMEOUT_MS: "-1" }), 30 * 60_000);
+  assert.equal(resolveIdleTimeoutMs({ ATLAS_CORE_IDLE_TIMEOUT_MS: "30000ms" }), 30 * 60_000);
+  assert.equal(resolveIdleTimeoutMs({ ATLAS_CORE_IDLE_TIMEOUT_MS: "later" }), 30 * 60_000);
 });
 
 async function expectDoneWithin(server, ms) {
@@ -4224,7 +4224,7 @@ async function expectDoneWithin(server, ms) {
 }
 
 test("server shuts itself down after the idle timeout with no connections", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({
     port: 0,
     stateFile: path.join(dir, "state.json"),
@@ -4241,7 +4241,7 @@ test("server shuts itself down after the idle timeout with no connections", asyn
 });
 
 test("the legacy event stream requests a full-chrome migration and closes", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({
@@ -4269,7 +4269,7 @@ test("the legacy event stream requests a full-chrome migration and closes", asyn
 });
 
 test("an open event WebSocket keeps the server alive past the idle timeout", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({
@@ -4304,7 +4304,7 @@ test("an open event WebSocket keeps the server alive past the idle timeout", asy
 });
 
 test("ending the last open session shuts the server down", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -4329,7 +4329,7 @@ test("ending the last open session shuts the server down", async () => {
 });
 
 test("ending one of several sessions keeps the server running", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const first = path.join(dir, "first.html");
   const second = path.join(dir, "second.html");
   await writeFile(first, "<!doctype html><html><body>1</body></html>");
@@ -4360,7 +4360,7 @@ test("ending one of several sessions keeps the server running", async () => {
 });
 
 test("a user-initiated end via the keyed route blocks a plain reopen but honors reopen: true", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   // A second, never-ended session keeps the server from self-shutting-down once the first
   // session ends with nothing connected, so the later fetches below have a server to hit.
@@ -4417,7 +4417,7 @@ test("a user-initiated end via the keyed route blocks a plain reopen but honors 
 });
 
 test("a blocked user-ended open returns the current listener URL", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-user-ended-current-url-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-user-ended-current-url-"));
   const artifact = path.join(dir, "artifact.html");
   const statePath = path.join(dir, "state.json");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -4460,7 +4460,7 @@ test("a blocked user-ended open returns the current listener URL", async () => {
 });
 
 test("an agent cleanup after a user end still blocks a plain reopen", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   const keepAlive = path.join(dir, "keep-alive.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -4509,7 +4509,7 @@ test("an agent cleanup after a user end still blocks a plain reopen", async () =
 });
 
 test("an agent-initiated end via the file-based route reopens normally without the reopen flag", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   // A second, never-ended session keeps the server from self-shutting-down once the first
   // session ends with nothing connected, so the later fetches below have a server to hit.
@@ -4530,7 +4530,7 @@ test("an agent-initiated end via the file-based route reopens normally without t
       body: JSON.stringify({ file: artifact }),
     });
 
-    // `lavish-axi end <file>` uses the file-based route - agent-initiated.
+    // `atlas-core end <file>` uses the file-based route - agent-initiated.
     await fetch(`${base}/api/end`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -4554,7 +4554,7 @@ test("an agent-initiated end via the file-based route reopens normally without t
 });
 
 test("poll on an ended session reports who ended it", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   // A second, never-ended session keeps the server from self-shutting-down once the first
   // session ends with nothing connected, so the poll below has a server to hit.
@@ -4589,7 +4589,7 @@ test("poll on an ended session reports who ended it", async () => {
 });
 
 test("send-and-end prompt submissions wake active polls with ended attribution", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -4639,7 +4639,7 @@ test("send-and-end prompt submissions wake active polls with ended attribution",
 });
 
 test("ending an active poll without final feedback leaves presence waiting", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   const keepAlive = path.join(dir, "keep-alive.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -4677,7 +4677,7 @@ test("ending an active poll without final feedback leaves presence waiting", asy
 });
 
 test("closing the last review WebSocket releases an active poll without ending the session", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({
@@ -4723,7 +4723,7 @@ test("closing the last review WebSocket releases an active poll without ending t
 });
 
 test("a poll that starts after a browser disconnect receives its own full wait", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({
@@ -4753,7 +4753,7 @@ test("a poll that starts after a browser disconnect receives its own full wait",
 });
 
 test("a review WebSocket reconnect within the grace period keeps the active poll waiting", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({
@@ -4791,7 +4791,7 @@ test("a review WebSocket reconnect within the grace period keeps the active poll
 });
 
 test("event WebSocket agent-presence reflects waiting, listening, and working transitions", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await (await import("node:fs/promises")).writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -4830,7 +4830,7 @@ test("event WebSocket agent-presence reflects waiting, listening, and working tr
 });
 
 test("event WebSocket handshake reports waiting on a fresh session that never had a poll", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await (await import("node:fs/promises")).writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -4853,7 +4853,7 @@ test("event WebSocket handshake reports waiting on a fresh session that never ha
 });
 
 test("event WebSocket agent-presence returns to waiting when a poll times out without feedback", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -4884,7 +4884,7 @@ test("event WebSocket agent-presence returns to waiting when a poll times out wi
 });
 
 test("SSE agent-presence returns to waiting when a poll disconnects without feedback", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -4919,7 +4919,7 @@ test("SSE agent-presence returns to waiting when a poll disconnects without feed
 });
 
 test("SSE agent-presence returns to waiting when poll feedback storage fails", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   const stateFile = path.join(dir, "state.json");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -4970,7 +4970,7 @@ test("heartbeat long-poll errors close the stream without Express error handling
 });
 
 test("a poll dropped before it arms never leaves presence listening", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -5026,7 +5026,7 @@ test("a poll dropped before it arms never leaves presence listening", async () =
 });
 
 test("immediate poll delivery leaves presence working and preserves the next send", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await (await import("node:fs/promises")).writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -5083,7 +5083,7 @@ test("immediate poll delivery leaves presence working and preserves the next sen
 });
 
 test("overlapping poll cleanup preserves working presence after one poll delivers feedback", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   const stateFile = path.join(dir, "state.json");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -5163,7 +5163,7 @@ test("overlapping poll cleanup preserves working presence after one poll deliver
 });
 
 test("a fresh poll attaching alone retires the previous round's working presence", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -5206,7 +5206,7 @@ test("a fresh poll attaching alone retires the previous round's working presence
 });
 
 test("a disconnect during immediate feedback take requeues the batch without working presence", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   const stateFile = path.join(dir, "state.json");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -5298,7 +5298,7 @@ test("a disconnect during immediate feedback take requeues the batch without wor
 });
 
 test("a disconnect during event-driven feedback take requeues the batch without working presence", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   const stateFile = path.join(dir, "state.json");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -5404,7 +5404,7 @@ test("a disconnect during event-driven feedback take requeues the batch without 
 });
 
 test("a restored batch wakes a poll that started listening during the restore", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   const stateFile = path.join(dir, "state.json");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -5528,7 +5528,7 @@ test("a restored batch wakes a poll that started listening during the restore", 
 });
 
 test("a restore that fails to persist is logged instead of silently dropping the batch", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   const stateFile = path.join(dir, "state.json");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
@@ -5619,7 +5619,7 @@ test("a restore that fails to persist is logged instead of silently dropping the
 });
 
 test("SSE agent-presence resets to waiting after ending and reopening a session", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -5665,10 +5665,10 @@ test("SSE agent-presence resets to waiting after ending and reopening a session"
   }
 });
 
-// #171: a browser tab left open across `lavish-axi end` must be told the session ended, instead
+// #171: a browser tab left open across `atlas-core end` must be told the session ended, instead
 // of silently keeping Send enabled for feedback nobody will ever poll for.
 test("SSE forwards an ended event to an attached chrome when the agent ends the session (#171)", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -5703,7 +5703,7 @@ test("SSE forwards an ended event to an attached chrome when the agent ends the 
 // already ended - without a full page reload, so its bootstrapped initialEnded is stale or never
 // ran - must not depend on catching a live "ended" emit it can no longer be attached in time for.
 test("SSE sends an immediate ended snapshot to a connection that attaches after the session already ended (#171)", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   // A second, still-open session keeps the server from self-shutting-down (it only does that
   // once every session is ended), so it stays up long enough to attach the late connection below.
@@ -5748,7 +5748,7 @@ test("SSE sends an immediate ended snapshot to a connection that attaches after 
 // #171: without this, a browser that missed the SSE event (or had already queued a Send before it
 // arrived) got a 200 for a prompt no agent will ever poll for.
 test("POST /api/:key/prompts rejects a batch queued after the session already ended (#171)", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -5797,7 +5797,7 @@ test("POST /api/:key/prompts rejects a batch queued after the session already en
 });
 
 test("a chrome page served after the session already ended boots read-only (#171)", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -5833,7 +5833,7 @@ test("a chrome page served after the session already ended boots read-only (#171
 });
 
 test("immediate send-and-end delivery clears working presence without an active poll", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -5875,7 +5875,7 @@ test("immediate send-and-end delivery clears working presence without an active 
 });
 
 test("SSE agent-presence returns to waiting after an agent reply", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -5920,7 +5920,7 @@ test("SSE agent-presence returns to waiting after an agent reply", async () => {
 });
 
 test("SSE agent-presence stays working when resuming after immediate feedback", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -5960,20 +5960,20 @@ test("SSE agent-presence stays working when resuming after immediate feedback", 
 
 test("hasLiveReloadRootOptIn detects the data attribute and meta opt-in", () => {
   assert.equal(hasLiveReloadRootOptIn("<html><body></body></html>"), false);
-  assert.equal(hasLiveReloadRootOptIn(`<html data-lavish-live-reload-root><body></body></html>`), true);
+  assert.equal(hasLiveReloadRootOptIn(`<html data-atlas-live-reload-root><body></body></html>`), true);
   assert.equal(
-    hasLiveReloadRootOptIn(`<html><head><meta name="lavish-live-reload" content="root"></head></html>`),
+    hasLiveReloadRootOptIn(`<html><head><meta name="atlas-live-reload" content="root"></head></html>`),
     true,
   );
 });
 
 test("hasLiveReloadRootOptIn ignores commented and text data attribute mentions", () => {
-  assert.equal(hasLiveReloadRootOptIn(`<!-- <html data-lavish-live-reload-root> -->`), false);
-  assert.equal(hasLiveReloadRootOptIn(`<html><body><code>data-lavish-live-reload-root</code></body></html>`), false);
+  assert.equal(hasLiveReloadRootOptIn(`<!-- <html data-atlas-live-reload-root> -->`), false);
+  assert.equal(hasLiveReloadRootOptIn(`<html><body><code>data-atlas-live-reload-root</code></body></html>`), false);
 });
 
 test("resolveWatchTarget defaults to the artifact file so large sibling trees aren't scanned", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-watch-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-watch-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   try {
@@ -5985,10 +5985,58 @@ test("resolveWatchTarget defaults to the artifact file so large sibling trees ar
   }
 });
 
-test("resolveWatchTarget upgrades to the artifact directory when data-lavish-live-reload-root opts in", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-watch-"));
+for (const limitCode of ["ENOSPC", "EMFILE"]) {
+  test(`artifact watching falls back to polling when the native watch limit is exhausted (${limitCode})`, async () => {
+    const { createResilientWatcher } = await import("../src/server.js");
+    assert.equal(typeof createResilientWatcher, "function");
+
+    const created = [];
+    const events = [];
+    const failures = [];
+    const fallbacks = [];
+    const watch = (target, options) => {
+      const watcher = Object.assign(new EventEmitter(), {
+        closed: false,
+        async close() {
+          watcher.closed = true;
+        },
+      });
+      created.push({ target, options, watcher });
+      return watcher;
+    };
+
+    const watcher = createResilientWatcher(
+      { path: "/tmp/atlas-artifact.html", options: { ignoreInitial: true } },
+      {
+        watch,
+        onAll: (event, file) => events.push([event, file]),
+        onError: (error) => failures.push(error),
+        onFallback: (error) => fallbacks.push(error),
+      },
+    );
+    const limitError = Object.assign(new Error(`System limit for file watching reached: ${limitCode}`), {
+      code: limitCode,
+    });
+    created[0].watcher.emit("error", limitError);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(created.length, 2);
+    assert.equal(created[0].watcher.closed, true);
+    assert.deepEqual(created[1].options, { ignoreInitial: true, usePolling: true });
+    assert.deepEqual(fallbacks, [limitError]);
+    assert.deepEqual(failures, []);
+
+    created[1].watcher.emit("all", "change", "/tmp/atlas-artifact.html");
+    assert.deepEqual(events, [["change", "/tmp/atlas-artifact.html"]]);
+    await watcher.close();
+    assert.equal(created[1].watcher.closed, true);
+  });
+}
+
+test("resolveWatchTarget upgrades to the artifact directory when data-atlas-live-reload-root opts in", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-watch-"));
   const artifact = path.join(dir, "artifact.html");
-  await writeFile(artifact, `<!doctype html><html data-lavish-live-reload-root><body></body></html>`);
+  await writeFile(artifact, `<!doctype html><html data-atlas-live-reload-root><body></body></html>`);
   try {
     const target = await resolveWatchTarget({ file: artifact, key: "abc" });
     assert.equal(target.path, dir);
@@ -6001,14 +6049,14 @@ test("resolveWatchTarget upgrades to the artifact directory when data-lavish-liv
 
 test("resolveWatchTarget falls back to file-only when the artifact can't be read", async () => {
   const target = await resolveWatchTarget({
-    file: path.join(tmpdir(), `lavish-missing-artifact-${process.hrtime.bigint()}.html`),
+    file: path.join(tmpdir(), `atlas-missing-artifact-${process.hrtime.bigint()}.html`),
     key: "abc",
   });
   assert.equal(target.scope, "file");
 });
 
 test("concurrent same-session opens create only one file watcher", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-watch-race-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-watch-race-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body>race</body></html>");
   const key = sessionKey(artifact);
@@ -6053,7 +6101,7 @@ test("concurrent same-session opens create only one file watcher", async () => {
 });
 
 test("/health and the landing page stay responsive after opening two back-to-back sessions", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-back-to-back-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-back-to-back-"));
   const a = path.join(dir, "a.html");
   const b = path.join(dir, "b.html");
   await writeFile(a, "<!doctype html><html><body>a</body></html>");
@@ -6089,7 +6137,7 @@ test("/health and the landing page stay responsive after opening two back-to-bac
       new Promise((_, reject) => setTimeout(() => reject(new Error("/ timed out")), 1000)),
     ]);
     assert.equal(rootRes.status, 200);
-    assert.match(await rootRes.text(), /Lavish Editor/);
+    assert.match(await rootRes.text(), /Atlas Core/);
 
     assert.ok(Date.now() - start < 1000, "both probes should return well under one second");
   } finally {
@@ -6099,7 +6147,7 @@ test("/health and the landing page stay responsive after opening two back-to-bac
 });
 
 test("server debug logger receives session and watcher lifecycle events", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-debug-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-debug-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const loggedArtifact = await canonicalFile(artifact);
@@ -6125,6 +6173,14 @@ test("server debug logger receives session and watcher lifecycle events", async 
     assert.ok(
       logs.some((line) => /watch/i.test(line)),
       `expected a watcher log line, got: ${JSON.stringify(logs)}`,
+    );
+    assert.ok(
+      logs.some((line) => line.startsWith("[atlas-core]")),
+      JSON.stringify(logs),
+    );
+    assert.ok(
+      logs.every((line) => !line.startsWith("[atlas]")),
+      JSON.stringify(logs),
     );
   } finally {
     await server.close();
@@ -6157,7 +6213,7 @@ test("layout gate curtain reuses the ended overlay card styling", async () => {
   const js = await chromeClientSource();
   const css = await chromeCssSource();
 
-  assert.match(html, /<body class="lavish layout-gate-active">/);
+  assert.match(html, /<body class="atlas layout-gate-active">/);
   assert.match(
     html,
     /<iframe id="artifact" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" data-artifact-src="\/artifact\/abc\/index\.html"><\/iframe>/,
@@ -6170,7 +6226,7 @@ test("layout gate curtain reuses the ended overlay card styling", async () => {
   assert.match(css, /body\.layout-gate-active iframe#artifact\{[^}]*opacity:0/);
   assert.match(css, /\.ended-action\{[^}]*margin-top:var\(--space-8\)/);
   assert.match(js, /layoutGateAction\.onclick = \(\) => forceRevealLayoutGate\("manual"\)/);
-  assert.match(noGateHtml, /<body class="lavish">/);
+  assert.match(noGateHtml, /<body class="atlas">/);
   assert.match(noGateHtml, /id="layoutGateOverlay" hidden/);
   assert.match(noGateHtml, /"layoutGateEnabled":false/);
 });
@@ -6190,9 +6246,9 @@ test("annotation card queues and sends immediately on Ctrl+Enter or Cmd+Enter", 
 
   assert.match(js, /event\.ctrlKey \|\| event\.metaKey/);
   assert.match(js, /sendQueuedPrompts\(\)/);
-  assert.match(js, /class="lavish-hint"/);
+  assert.match(js, /class="atlas-hint"/);
   assert.match(js, /\+Enter to send/);
-  assert.match(js, /\.lavish-annotation-card \.lavish-hint\{/);
+  assert.match(js, /\.atlas-annotation-card \.atlas-hint\{/);
 });
 
 test("chrome client chat input sends on Enter and inserts newline on Shift+Enter", async () => {
@@ -6248,7 +6304,7 @@ test("chrome falls back to a default favicon and title when none are provided", 
   const html = createChromeHtml({ key: "abc", file: "/tmp/artifact.html" });
 
   assert.match(html, /<link rel="icon" href="data:image\/svg\+xml,/);
-  assert.match(html, /<title>Lavish Editor<\/title>/);
+  assert.match(html, /<title>Atlas Core<\/title>/);
 });
 
 test("chrome adopts a favicon tag and tab title passed from the artifact", () => {
@@ -6256,11 +6312,11 @@ test("chrome adopts a favicon tag and tab title passed from the artifact", () =>
     '<link rel="icon" href="data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\'><text>🗂️</text></svg>">';
   const html = createChromeHtml(
     { key: "abc", file: "/tmp/artifact.html" },
-    { faviconTag, title: "Project Board · Lavish" },
+    { faviconTag, title: "Project Board · Atlas Core" },
   );
 
   assert.ok(html.includes(faviconTag), "artifact favicon tag is injected verbatim");
-  assert.match(html, /<title>Project Board · Lavish<\/title>/);
+  assert.match(html, /<title>Project Board · Atlas Core<\/title>/);
 });
 
 test("chrome tab title from the artifact is HTML-escaped", () => {
@@ -6342,7 +6398,7 @@ test("extractArtifactHead reads the real href, not one hidden in another attribu
 // when a poll happens to take the batch - and the anchor names the element in the annotation
 // card's own words.
 test("the prompts route returns the transcript and syncs it live at send time", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, '<!doctype html><html><body><h2 id="phase-1">Phase 1</h2></body></html>');
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -6396,7 +6452,7 @@ test("the prompts route returns the transcript and syncs it live at send time", 
 });
 
 test("retrying an acknowledged prompt does not wake an unrelated poll", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
@@ -6457,7 +6513,7 @@ test("retrying an acknowledged prompt does not wake an unrelated poll", async ()
 });
 
 test("the live transcript carries rendered html for agent replies and never for user text", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "lavish-serve-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const artifact = path.join(dir, "artifact.html");
   await writeFile(artifact, "<!doctype html><html><body></body></html>");
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });

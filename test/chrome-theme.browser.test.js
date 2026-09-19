@@ -6,7 +6,7 @@ import test from "node:test";
 
 import { createChromeDriver, freePort, run } from "./browser-e2e.js";
 
-const runBrowserE2e = process.env.LAVISH_AXI_BROWSER_E2E === "1";
+const runBrowserE2e = process.env.ATLAS_CORE_BROWSER_E2E === "1";
 
 function contrastRatio(foreground, background) {
   const parse = (value) => {
@@ -28,7 +28,7 @@ const THEME_ARTIFACT = `<!doctype html>
 <body><main><h1>Artifact-owned theme</h1><p>The chrome must not restyle this content.</p></main>
 <script>
   setInterval(() => parent.postMessage({
-    type: "lavish-test:theme-probe",
+    type: "atlas-test:theme-probe",
     background: getComputedStyle(document.body).backgroundColor,
     color: getComputedStyle(document.body).color,
   }, "*"), 100);
@@ -38,26 +38,26 @@ test(
   "the chrome uses OLED Sunset Calm without styling the artifact",
   { skip: !runBrowserE2e, timeout: 300_000 },
   async () => {
-    const temp = await mkdtemp(path.join(tmpdir(), "lavish-chrome-theme-"));
+    const temp = await mkdtemp(path.join(tmpdir(), "atlas-chrome-theme-"));
     const port = await freePort();
     const chromePort = await freePort();
-    const lavishEnv = {
-      LAVISH_AXI_PORT: String(port),
-      LAVISH_AXI_STATE_DIR: path.join(temp, "state"),
-      LAVISH_AXI_NO_OPEN: "1",
-      LAVISH_AXI_TELEMETRY: "0",
-      LAVISH_AXI_HOST: "127.0.0.1",
-      LAVISH_AXI_LINK_HOST: "127.0.0.1",
+    const atlasEnv = {
+      ATLAS_CORE_PORT: String(port),
+      ATLAS_CORE_STATE_DIR: path.join(temp, "state"),
+      ATLAS_CORE_NO_OPEN: "1",
+      ATLAS_CORE_TELEMETRY: "0",
+      ATLAS_CORE_HOST: "127.0.0.1",
+      ATLAS_CORE_LINK_HOST: "127.0.0.1",
     };
     const browser = createChromeDriver({
       temp,
-      session: `lavish-chrome-theme-${process.pid}`,
+      session: `atlas-chrome-theme-${process.pid}`,
       port: chromePort,
     });
     try {
       const artifact = path.join(temp, "theme.html");
       await writeFile(artifact, THEME_ARTIFACT);
-      const output = run(process.execPath, ["bin/lavish-axi.js", artifact, "--no-open"], lavishEnv);
+      const output = run(process.execPath, ["bin/atlas-core.js", artifact, "--no-open"], atlasEnv);
       const url = output.match(/url:\s*"([^"]+)"/)?.[1];
       assert.ok(url, output);
       browser.emulate("1440x1000x1");
@@ -68,7 +68,7 @@ test(
         const frame = document.getElementById("artifact");
         window.__artifactThemeProbe = null;
         window.addEventListener("message", (event) => {
-          if (event.source === frame.contentWindow && event.data?.type === "lavish-test:theme-probe")
+          if (event.source === frame.contentWindow && event.data?.type === "atlas-test:theme-probe")
             window.__artifactThemeProbe = event.data;
         });
         return "ready";
@@ -104,7 +104,7 @@ test(
       assert.equal(theme.frameBg, "rgb(255, 255, 255)");
       assert.match(theme.monoFont, /^"?IBM Plex Mono/);
       assert.deepEqual(theme.artifactProbe, {
-        type: "lavish-test:theme-probe",
+        type: "atlas-test:theme-probe",
         background: "rgb(37, 51, 68)",
         color: "rgb(237, 226, 201)",
       });
@@ -247,7 +247,7 @@ test(
       }
     } finally {
       try {
-        run(process.execPath, ["bin/lavish-axi.js", "stop", "--port", String(port)], lavishEnv, 15_000);
+        run(process.execPath, ["bin/atlas-core.js", "stop", "--port", String(port)], atlasEnv, 15_000);
       } finally {
         try {
           browser.stop();

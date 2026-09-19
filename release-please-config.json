@@ -1,11 +1,13 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "d62853166c21dde6f9e8a0ba19c8fe7f0d499545",
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "packages": {
     ".": {
       "release-type": "node",
-      "package-name": "lavish-axi",
+      "package-name": "atlas-core",
+      "component": "atlas-core",
       "extra-files": [
         {
           "type": "json",

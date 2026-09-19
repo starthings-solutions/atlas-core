@@ -19,9 +19,9 @@ The release and dependency bots are exempt so their automation keeps working, bu
 Workflow requires `no-mistakes` v1.46.0 or newer.
 Earlier versions can route pushes to a fork, but they do not write the pipeline attestation required by this repository's PR gate.
 
-1. Fork the repo, then clone the parent repo or set your local `origin` back to the parent repo (`git@github.com:kunchenguid/lavish-axi.git`).
+1. Fork the repo, then clone the parent repo or set your local `origin` back to the parent repo (`git@github.com:starthings-solutions/atlas-core.git`).
 2. Create a branch and make your changes.
-3. Initialize or refresh the gate with your fork as the push target: `no-mistakes init --fork-url git@github.com:<you>/lavish-axi.git`.
+3. Initialize or refresh the gate with your fork as the push target: `no-mistakes init --fork-url git@github.com:<you>/atlas-core.git`.
 4. Commit your changes.
 5. Push through the gate instead of pushing to `origin`:
 
@@ -37,11 +37,12 @@ See the [no-mistakes quick start](https://kunchenguid.github.io/no-mistakes/star
 ## Repo Conventions
 
 - Node 22+, ESM-only JavaScript, and TypeScript `checkJs` validation.
+- Install Atlas Core from a clone with `npm run install:local`. To update an existing clone, run `git pull --ff-only` and then `npm run install:local` again.
 - Run `pnpm run check` before pushing.
 - Do not reformat repo-provided `.agents/` skill content; `.prettierignore` excludes it intentionally.
 - Do not hand-edit `CHANGELOG.md` or `.release-please-manifest.json`.
-- User-facing telemetry docs should stay minimal: anonymous usage telemetry, no sensitive content, and `LAVISH_AXI_TELEMETRY=0` opt-out.
+- User-facing telemetry docs should stay minimal: anonymous usage telemetry, no sensitive content, and `ATLAS_CORE_TELEMETRY=0` opt-out.
 
 ## Questions
 
-Open an issue, or talk to me on [Discord](https://discord.gg/Wsy2NpnZDu).
+Open an issue in the [Atlas Core repository](https://github.com/starthings-solutions/atlas-core/issues).

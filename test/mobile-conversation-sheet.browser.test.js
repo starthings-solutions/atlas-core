@@ -11,7 +11,7 @@ import { createChromeDriver, freePort, run } from "./browser-e2e.js";
 // the Send row ran past the viewport. The sheet replaces that split, and these assertions are the
 // geometry an end user would notice: nothing clipped, every control inside the viewport, the
 // artifact never under the dock, and the desktop layout untouched.
-const runBrowserE2e = process.env.LAVISH_AXI_BROWSER_E2E === "1";
+const runBrowserE2e = process.env.ATLAS_CORE_BROWSER_E2E === "1";
 
 const ARTIFACT = `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sheet fixture</title>
@@ -79,18 +79,18 @@ test(
   "conversation overlays the artifact on desktop and remains a bottom sheet on mobile",
   { skip: !runBrowserE2e, timeout: 300_000 },
   async () => {
-    const temp = await mkdtemp(path.join(tmpdir(), "lavish-mobile-sheet-"));
+    const temp = await mkdtemp(path.join(tmpdir(), "atlas-mobile-sheet-"));
     const port = await freePort();
     const chromePort = await freePort();
-    const lavishEnv = {
-      LAVISH_AXI_PORT: String(port),
-      LAVISH_AXI_STATE_DIR: path.join(temp, "state"),
-      LAVISH_AXI_NO_OPEN: "1",
-      LAVISH_AXI_TELEMETRY: "0",
-      LAVISH_AXI_HOST: "127.0.0.1",
-      LAVISH_AXI_LINK_HOST: "127.0.0.1",
+    const atlasEnv = {
+      ATLAS_CORE_PORT: String(port),
+      ATLAS_CORE_STATE_DIR: path.join(temp, "state"),
+      ATLAS_CORE_NO_OPEN: "1",
+      ATLAS_CORE_TELEMETRY: "0",
+      ATLAS_CORE_HOST: "127.0.0.1",
+      ATLAS_CORE_LINK_HOST: "127.0.0.1",
     };
-    const driver = createChromeDriver({ temp, session: `lavish-mobile-sheet-${process.pid}`, port: chromePort });
+    const driver = createChromeDriver({ temp, session: `atlas-mobile-sheet-${process.pid}`, port: chromePort });
     const { evaluate, wait, emulate, open } = driver;
 
     function geometry() {
@@ -191,14 +191,14 @@ test(
     try {
       const artifact = path.join(temp, "review.html");
       await writeFile(artifact, ARTIFACT);
-      const output = run(process.execPath, ["bin/lavish-axi.js", artifact, "--no-open"], lavishEnv);
+      const output = run(process.execPath, ["bin/atlas-core.js", artifact, "--no-open"], atlasEnv);
       const url = output.match(/url:\s*"([^"]+)"/)?.[1];
       assert.ok(url, output);
       for (const reply of REPLIES) {
         run(
           process.execPath,
-          ["bin/lavish-axi.js", "poll", artifact, "--agent-reply", reply, "--timeout-ms", "200"],
-          lavishEnv,
+          ["bin/atlas-core.js", "poll", artifact, "--agent-reply", reply, "--timeout-ms", "200"],
+          atlasEnv,
           30_000,
         );
       }
@@ -307,7 +307,7 @@ test(
       assert.equal(geometry().drawerOpen, false, "desktop disclosure state is not persisted");
     } finally {
       try {
-        run(process.execPath, ["bin/lavish-axi.js", "stop", "--port", String(port)], lavishEnv, 15_000);
+        run(process.execPath, ["bin/atlas-core.js", "stop", "--port", String(port)], atlasEnv, 15_000);
       } finally {
         try {
           driver.stop();

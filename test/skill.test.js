@@ -13,11 +13,11 @@ import {
   validateSkillMarkdown,
 } from "../src/skill.js";
 
-test("createSkillMarkdown emits valid frontmatter naming the lavish skill", () => {
+test("createSkillMarkdown emits valid frontmatter naming the Atlas Core skill", () => {
   const { frontmatter, errors } = parseSkillFrontmatter(createSkillMarkdown());
 
   assert.deepEqual(errors, [], "frontmatter parses as plain block-style YAML");
-  assert.equal(frontmatter.name, "lavish");
+  assert.equal(frontmatter.name, "atlas-core");
   assert.equal(frontmatter.description, SKILL_DESCRIPTION);
 });
 
@@ -25,7 +25,7 @@ test("createSkillMarkdown emits Hermes Agent metadata as string-valued frontmatt
   const { frontmatter } = parseSkillFrontmatter(createSkillMarkdown());
 
   assert.deepEqual(frontmatter.metadata, {
-    author: "Kun Chen (kunchenguid)",
+    author: "Starthings Solutions",
     "argument-hint": "<what the artifact should show>",
     "hermes-tags": "html, review, artifacts, visualization",
     "hermes-category": "productivity",
@@ -36,7 +36,7 @@ test("createSkillMarkdown emits Hermes Agent metadata as string-valued frontmatt
 test("createSkillMarkdown conforms to the Agent Skills frontmatter contract", () => {
   // Agent Plugins delegates skill validity to Agent Skills and silently skips any skill
   // that fails it, so a regression here would quietly remove the skill from the plugin.
-  const { valid, errors } = validateSkillMarkdown(createSkillMarkdown(), { directoryName: "lavish" });
+  const { valid, errors } = validateSkillMarkdown(createSkillMarkdown(), { directoryName: "atlas-core" });
 
   assert.deepEqual(errors, []);
   assert.ok(valid);
@@ -51,26 +51,26 @@ test("createSkillMarkdown keeps every frontmatter field in the allowed set", () 
 });
 
 test("validateSkillMarkdown rejects the shapes the reference validator rejects", () => {
-  const flowCollection = "---\nname: lavish\ndescription: d\nmetadata:\n  tags: [a, b]\n---\nbody";
+  const flowCollection = "---\nname: atlas-core\ndescription: d\nmetadata:\n  tags: [a, b]\n---\nbody";
   assert.match(validateSkillMarkdown(flowCollection).errors.join("\n"), /flow collection/);
 
-  const unknownField = "---\nname: lavish\ndescription: d\nargument-hint: x\n---\nbody";
+  const unknownField = "---\nname: atlas-core\ndescription: d\nargument-hint: x\n---\nbody";
   assert.match(validateSkillMarkdown(unknownField).errors.join("\n"), /unexpected frontmatter field `argument-hint`/);
 
-  const nested = "---\nname: lavish\ndescription: d\nmetadata:\n  hermes:\n    category: p\n---\nbody";
+  const nested = "---\nname: atlas-core\ndescription: d\nmetadata:\n  hermes:\n    category: p\n---\nbody";
   assert.match(validateSkillMarkdown(nested).errors.join("\n"), /nests deeper than one level/);
 
-  const mismatched = "---\nname: lavish\ndescription: d\n---\nbody";
+  const mismatched = "---\nname: atlas-core\ndescription: d\n---\nbody";
   assert.match(
     validateSkillMarkdown(mismatched, { directoryName: "other" }).errors.join("\n"),
     /must match skill name/,
   );
 
-  const missing = "---\nname: lavish\n---\nbody";
+  const missing = "---\nname: atlas-core\n---\nbody";
   assert.match(validateSkillMarkdown(missing).errors.join("\n"), /`description` is required/);
 });
 
-test("createSkillMarkdown handles explicit /lavish invocation arguments", () => {
+test("createSkillMarkdown handles explicit /atlas-core invocation arguments", () => {
   const md = createSkillMarkdown();
   const body = md.slice(md.indexOf("\n---\n", 4) + 5);
 
@@ -82,16 +82,16 @@ test("createSkillMarkdown stays a short stub that defers to the CLI", () => {
   const md = createSkillMarkdown();
 
   assert.ok(md.length <= MAX_SKILL_MARKDOWN_CHARS, "the generated skill stays drastically smaller than CLI guidance");
-  assert.match(md, /Lavish Editor/);
-  assert.match(md, /`npx -y lavish-axi --help`/);
-  assert.match(md, /`npx -y lavish-axi design`/);
-  assert.match(md, /`npx -y lavish-axi playbook <id>`/);
+  assert.match(md, /Atlas Core/);
+  assert.match(md, /`atlas-core --help`/);
+  assert.match(md, /`atlas-core design`/);
+  assert.match(md, /`atlas-core playbook <id>`/);
   assert.match(md, /stale/i);
 });
 
 test("createSkillMarkdown does not bake CLI-owned guidance into the skill", () => {
   const md = createSkillMarkdown();
-  const home = createHomeOutput({ bin: "lavish-axi", sessions: [], includeSessions: false, agent: "static" });
+  const home = createHomeOutput({ bin: "atlas-core", sessions: [], includeSessions: false, agent: "static" });
 
   for (const item of home.visual_guidance) {
     assert.ok(!md.includes(item), `must not copy visual guidance: ${item.slice(0, 48)}...`);
@@ -128,12 +128,11 @@ test("createSkillMarkdown omits setup guidance", () => {
   assert.doesNotMatch(md, /setup plugin/);
 });
 
-test("createSkillMarkdown uses non-interactive npx commands", () => {
+test("createSkillMarkdown uses only the locally installed Atlas Core command", () => {
   const md = createSkillMarkdown();
 
-  assert.match(md, /`npx -y lavish-axi <html-file>`/);
-  assert.match(md, /If lavish-axi output shows a follow-up command starting with `lavish-axi`/);
-  assert.match(md, /run it as `npx -y lavish-axi/);
-  assert.doesNotMatch(md, /`npx lavish-axi/);
-  assert.doesNotMatch(md, /Run `lavish-axi/);
+  assert.match(md, /`atlas-core <html-file>`/);
+  assert.match(md, /If Atlas Core output shows a follow-up command starting with `atlas-core`/);
+  assert.doesNotMatch(md, /\bnpx\b/);
+  assert.doesNotMatch(md, /lavish-axi/i);
 });

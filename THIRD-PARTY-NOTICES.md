@@ -1,6 +1,6 @@
 # Third-party notices
 
-The published `lavish-axi` package vendors the following third-party software into `dist/`.
+The Atlas Core source distribution vendors the following third-party software into `dist/`.
 Each component remains under its own license; the notices below satisfy their attribution requirements.
 The whiteboard bundle (`dist/whiteboard/`) is built from these packages by `scripts/build.js`.
 
@@ -167,7 +167,11 @@ The Xiaolai family (CJK glyphs) is intentionally not vendored; Excalidraw falls 
 | `daisyui.css`, `daisyui-themes.css` (daisyUI)     | MIT     |
 | `tailwindcss-browser.js` (`@tailwindcss/browser`) | MIT     |
 
-## Pre-publication audit note
+## Distribution audit note
 
 Font license attributions above were compiled from each family's upstream project.
-Before any npm publication that changes the vendored font set, re-verify each family's license file upstream (the `@excalidraw/excalidraw` npm package does not ship per-font license files).
+Before distributing a build that changes the vendored font set, re-verify each family's license file upstream (the `@excalidraw/excalidraw` npm package does not ship per-font license files).
+
+## Project provenance
+
+Atlas Core is derived from the upstream [`kunchenguid/lavish-axi`](https://github.com/kunchenguid/lavish-axi) project (Lavish). Its original MIT license and copyright notices remain in `LICENSE` and the repository history.

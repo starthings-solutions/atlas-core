@@ -1,16 +1,17 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "lavish-axi",
+  "name": "atlas-core",
   "version": "0.1.72",
-  "description": "HTML is the new markdown. Lavish is the new editor for your HTML artifacts.",
+  "description": "Local-first HTML artifact review and collaboration for AI agents.",
   "author": {
-    "name": "Kun Chen",
-    "url": "https://github.com/kunchenguid"
+    "name": "Starthings Solutions",
+    "url": "https://github.com/starthings-solutions"
   },
-  "homepage": "https://github.com/kunchenguid/lavish-axi#readme",
-  "repository": "https://github.com/kunchenguid/lavish-axi",
+  "homepage": "https://github.com/starthings-solutions/atlas-core#readme",
+  "repository": "https://github.com/starthings-solutions/atlas-core",
   "license": "MIT",
   "keywords": [
+    "atlas-core",
     "axi",
     "agent",
     "cli",

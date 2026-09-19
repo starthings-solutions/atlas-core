@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-const runBrowserE2e = process.env.LAVISH_AXI_BROWSER_E2E === "1";
+const runBrowserE2e = process.env.ATLAS_CORE_BROWSER_E2E === "1";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const baseCommit = "5b871af347444feda1d3002952ec5fc179248629";
 
@@ -39,9 +39,50 @@ async function waitForHealth(base, child, output) {
   throw new Error(`server did not become healthy\n${output.join("")}`);
 }
 
+async function packageCliEntry(root) {
+  const sourceEntries = (await readdir(path.join(root, "bin"))).filter((name) => name.endsWith(".js"));
+  if (sourceEntries.length === 1) return path.join(root, "bin", sourceEntries[0]);
+  const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+  const entry = typeof packageJson.bin === "string" ? packageJson.bin : Object.values(packageJson.bin || {})[0];
+  if (typeof entry !== "string" || entry.length === 0) throw new Error(`package at ${root} has no CLI entry`);
+  return path.join(root, entry);
+}
+
+async function rebrandArchivedFixture(root) {
+  const manifestPath = path.join(root, "package.json");
+  const manifestSource = await readFile(manifestPath, "utf8");
+  const manifest = JSON.parse(manifestSource);
+  const legacyPackage = String(manifest.name || "");
+  const legacyStem = legacyPackage.replace(/-axi$/, "");
+  const legacyEnvironment = legacyPackage.toUpperCase().replaceAll("-", "_");
+  const replacements = [
+    [legacyEnvironment, "ATLAS_CORE"],
+    [legacyPackage, "atlas-core"],
+    [legacyStem, "atlas"],
+  ].filter(([from]) => from);
+
+  async function rewriteFile(file) {
+    let source = await readFile(file, "utf8");
+    for (const [from, to] of replacements) source = source.replaceAll(from, to);
+    await writeFile(file, source);
+  }
+
+  async function rewriteDirectory(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) await rewriteDirectory(target);
+      else if (entry.isFile() && entry.name.endsWith(".js")) await rewriteFile(target);
+    }
+  }
+
+  await rewriteFile(manifestPath);
+  await rewriteDirectory(path.join(root, "bin"));
+  await rewriteDirectory(path.join(root, "src"));
+}
+
 async function startServer(root, env, port) {
   const output = [];
-  const child = spawn(process.execPath, [path.join(root, "bin/lavish-axi.js"), "server", "--port", String(port)], {
+  const child = spawn(process.execPath, [await packageCliEntry(root), "server", "--port", String(port)], {
     cwd: root,
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
@@ -99,21 +140,21 @@ test(
   "six legacy tabs migrate before seven sessions exercise live transport",
   { skip: !runBrowserE2e, timeout: 300_000 },
   async () => {
-    const temp = await mkdtemp(path.join(tmpdir(), "lavish-event-transport-"));
+    const temp = await mkdtemp(path.join(tmpdir(), "atlas-event-transport-"));
     const oldRoot = path.join(temp, "old-build");
     const archive = path.join(temp, "old-build.tar");
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
-    const lavishEnv = {
-      LAVISH_AXI_PORT: String(port),
-      LAVISH_AXI_STATE_DIR: path.join(temp, "state"),
-      LAVISH_AXI_NO_OPEN: "1",
-      LAVISH_AXI_TELEMETRY: "0",
-      LAVISH_AXI_HOST: "127.0.0.1",
-      LAVISH_AXI_LINK_HOST: "127.0.0.1",
+    const atlasEnv = {
+      ATLAS_CORE_PORT: String(port),
+      ATLAS_CORE_STATE_DIR: path.join(temp, "state"),
+      ATLAS_CORE_NO_OPEN: "1",
+      ATLAS_CORE_TELEMETRY: "0",
+      ATLAS_CORE_HOST: "127.0.0.1",
+      ATLAS_CORE_LINK_HOST: "127.0.0.1",
     };
     const chromeEnv = {
-      CHROME_DEVTOOLS_AXI_SESSION: `lavish-event-transport-${process.pid}`,
+      CHROME_DEVTOOLS_AXI_SESSION: `atlas-event-transport-${process.pid}`,
       CHROME_DEVTOOLS_AXI_USER_DATA_DIR: path.join(temp, "chrome"),
     };
 
@@ -133,7 +174,7 @@ test(
             "chrome-devtools-axi",
             [
               "eval",
-              `() => Boolean(window.__lavishChromeReady && document.getElementById("chatLog")?.textContent.includes(${JSON.stringify(text)}))`,
+              `() => Boolean(window.__atlasChromeReady && document.getElementById("chatLog")?.textContent.includes(${JSON.stringify(text)}))`,
             ],
             { cwd: repoRoot, env: { ...process.env, ...chromeEnv }, encoding: "utf8", timeout: 5_000 },
           );
@@ -150,10 +191,12 @@ test(
 
     try {
       await mkdir(oldRoot);
-      run("git", ["archive", "--format=tar", "--output", archive, baseCommit], lavishEnv);
-      run("tar", ["-xf", archive, "-C", oldRoot], lavishEnv);
+      run("git", ["archive", "--format=tar", "--output", archive, baseCommit], atlasEnv);
+      run("tar", ["-xf", archive, "-C", oldRoot], atlasEnv);
+      await rebrandArchivedFixture(oldRoot);
       await symlink(path.join(repoRoot, "node_modules"), path.join(oldRoot, "node_modules"), "dir");
-      oldServer = await startServer(oldRoot, lavishEnv, port);
+      const oldCliEntry = await packageCliEntry(oldRoot);
+      oldServer = await startServer(oldRoot, atlasEnv, port);
 
       for (let index = 0; index < 7; index += 1) {
         const file = path.join(temp, `board-${index + 1}.html`);
@@ -161,13 +204,7 @@ test(
           file,
           `<!doctype html><title>Board ${index + 1}</title><main id="board-${index + 1}">Board ${index + 1}</main>`,
         );
-        const output = run(
-          process.execPath,
-          ["bin/lavish-axi.js", file, "--no-open", "--no-gate"],
-          lavishEnv,
-          20_000,
-          oldRoot,
-        );
+        const output = run(process.execPath, [oldCliEntry, file, "--no-open", "--no-gate"], atlasEnv, 20_000, oldRoot);
         const url = output.match(/url:\s*"([^"]+)"/)?.[1];
         assert.ok(url, output);
         sessions.push({ file, url, key: new URL(url).pathname.split("/").pop() });
@@ -198,7 +235,7 @@ test(
           "chrome-devtools-axi",
           [
             "eval",
-            `() => new Promise((resolve, reject) => { const deadline = Date.now() + 8000; const checkReady = () => { if (!window.__lavishChromeReady) { if (Date.now() >= deadline) return reject(new Error("old chrome did not load")); return setTimeout(checkReady, 25); } const input = document.getElementById("chatInput"); input.value = ${JSON.stringify(`queued-before-upgrade-${index + 1}`)}; input.dispatchEvent(new Event("input", { bubbles: true })); document.getElementById("send").click(); const queueKey = "lavish-axi:queued:${session.key}"; const checkQueue = () => { if (sessionStorage.getItem(queueKey)) return resolve(true); if (Date.now() >= deadline) return reject(new Error("old chrome did not persist its queue")); setTimeout(checkQueue, 25); }; checkQueue(); }; checkReady(); })`,
+            `() => new Promise((resolve, reject) => { const deadline = Date.now() + 8000; const checkReady = () => { if (!window.__atlasChromeReady) { if (Date.now() >= deadline) return reject(new Error("old chrome did not load")); return setTimeout(checkReady, 25); } const input = document.getElementById("chatInput"); input.value = ${JSON.stringify(`queued-before-upgrade-${index + 1}`)}; input.dispatchEvent(new Event("input", { bubbles: true })); document.getElementById("send").click(); const queueKey = "atlas-core:queued:${session.key}"; const checkQueue = () => { if (sessionStorage.getItem(queueKey)) return resolve(true); if (Date.now() >= deadline) return reject(new Error("old chrome did not persist its queue")); setTimeout(checkQueue, 25); }; checkQueue(); }; checkReady(); })`,
           ],
           chromeEnv,
           10_000,
@@ -213,7 +250,7 @@ test(
         "chrome-devtools-axi",
         [
           "eval",
-          `() => { const frame = document.getElementById("artifact"); const token = new URL(frame.src).searchParams.get("artifact_load_token"); window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "lavish:reviewState", artifact_load_token: token, state: { card: { selector: "#board-1", text: "draft survives server replacement" }, fields: [] } } })); return sessionStorage.getItem("lavish-axi:review-state:${draftSession.key}"); }`,
+          `() => { const frame = document.getElementById("artifact"); const token = new URL(frame.src).searchParams.get("artifact_load_token"); window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "atlas:reviewState", artifact_load_token: token, state: { card: { selector: "#board-1", text: "draft survives server replacement" }, fields: [] } } })); return sessionStorage.getItem("atlas-core:review-state:${draftSession.key}"); }`,
         ],
         chromeEnv,
       );
@@ -221,7 +258,7 @@ test(
 
       await stopServer(oldServer, base, "stop");
       oldServer = undefined;
-      currentServer = await startServer(repoRoot, lavishEnv, port);
+      currentServer = await startServer(repoRoot, atlasEnv, port);
       run("chrome-devtools-axi", ["newpage", sessions[6].url, "--background"], chromeEnv);
 
       const sessionUrls = new Set(sessions.map((session) => session.url));
@@ -242,12 +279,12 @@ test(
             "chrome-devtools-axi",
             [
               "eval",
-              `() => new Promise((resolve, reject) => { const deadline = Date.now() + 10000; const check = () => { const draft = sessionStorage.getItem("lavish-axi:review-state:${session.key}") || ""; const banner = document.getElementById("outdatedBanner"); if (draft.includes("draft survives server replacement") && banner && !banner.hidden) return resolve(document.getElementById("outdatedText").textContent); if (Date.now() >= deadline) return reject(new Error("old chrome did not protect the draft")); setTimeout(check, 25); }; check(); })`,
+              `() => new Promise((resolve, reject) => { const deadline = Date.now() + 10000; const check = () => { const draft = sessionStorage.getItem("atlas-core:review-state:${session.key}") || ""; const banner = document.getElementById("outdatedBanner"); if (draft.includes("draft survives server replacement") && banner && !banner.hidden) return resolve(document.getElementById("outdatedText").textContent); if (Date.now() >= deadline) return reject(new Error("old chrome did not protect the draft")); setTimeout(check, 25); }; check(); })`,
             ],
             chromeEnv,
             12_000,
           );
-          assert.match(protectedDraft, /Lavish was stopped\. Reload after you start it again\./);
+          assert.match(protectedDraft, /was stopped\. Reload after you start it again\./);
           assert.doesNotMatch(protectedDraft, /updated/);
           run("chrome-devtools-axi", ["eval", '() => document.getElementById("outdatedReload").click()'], chromeEnv);
         }
@@ -256,7 +293,7 @@ test(
           "chrome-devtools-axi",
           [
             "eval",
-            `() => new Promise((resolve, reject) => { const deadline = Date.now() + 10000; const expectedDraft = ${index === 0 ? '"draft survives server replacement"' : '""'}; const check = () => { const draft = sessionStorage.getItem("lavish-axi:review-state:${session.key}") || ""; if (window.__lavishChromeReady && document.getElementById("artifact")?.src && (!expectedDraft || draft.includes(expectedDraft))) return resolve(true); if (Date.now() >= deadline) return reject(new Error("real legacy chrome did not migrate")); setTimeout(check, 25); }; check(); })`,
+            `() => new Promise((resolve, reject) => { const deadline = Date.now() + 10000; const expectedDraft = ${index === 0 ? '"draft survives server replacement"' : '""'}; const check = () => { const draft = sessionStorage.getItem("atlas-core:review-state:${session.key}") || ""; if (window.__atlasChromeReady && document.getElementById("artifact")?.src && (!expectedDraft || draft.includes(expectedDraft))) return resolve(true); if (Date.now() >= deadline) return reject(new Error("real legacy chrome did not migrate")); setTimeout(check, 25); }; check(); })`,
           ],
           chromeEnv,
           12_000,
@@ -289,7 +326,7 @@ test(
           "chrome-devtools-axi",
           [
             "eval",
-            `() => new Promise((resolve, reject) => { const promptStatuses = []; const browserFetch = window.fetch.bind(window); window.fetch = async (...args) => { const response = await browserFetch(...args); if (String(args[0]).endsWith("/prompts")) promptStatuses.push(response.status); return response; }; const input = document.getElementById("chatInput"); input.value = ${JSON.stringify(message)}; input.dispatchEvent(new Event("input", { bubbles: true })); document.getElementById("send").click(); const deadline = Date.now() + 8000; const queueKey = "lavish-axi:queued:${session.key}"; const check = () => { if (!sessionStorage.getItem(queueKey) && promptStatuses.length > 0) return resolve(promptStatuses.at(-1)); if (Date.now() >= deadline) return reject(new Error("prompt acknowledgement did not arrive")); setTimeout(check, 25); }; check(); })`,
+            `() => new Promise((resolve, reject) => { const promptStatuses = []; const browserFetch = window.fetch.bind(window); window.fetch = async (...args) => { const response = await browserFetch(...args); if (String(args[0]).endsWith("/prompts")) promptStatuses.push(response.status); return response; }; const input = document.getElementById("chatInput"); input.value = ${JSON.stringify(message)}; input.dispatchEvent(new Event("input", { bubbles: true })); document.getElementById("send").click(); const deadline = Date.now() + 8000; const queueKey = "atlas-core:queued:${session.key}"; const check = () => { if (!sessionStorage.getItem(queueKey) && promptStatuses.length > 0) return resolve(promptStatuses.at(-1)); if (Date.now() >= deadline) return reject(new Error("prompt acknowledgement did not arrive")); setTimeout(check, 25); }; check(); })`,
           ],
           chromeEnv,
           10_000,
@@ -298,8 +335,8 @@ test(
 
         const poll = run(
           process.execPath,
-          ["bin/lavish-axi.js", "poll", session.file, "--timeout-ms", "5000"],
-          lavishEnv,
+          ["bin/atlas-core.js", "poll", session.file, "--timeout-ms", "5000"],
+          atlasEnv,
           10_000,
         );
         assert.match(poll, new RegExp(message), `board ${index + 1} poll received its exact prompt`);
