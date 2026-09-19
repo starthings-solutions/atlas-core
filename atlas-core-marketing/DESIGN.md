@@ -1,4 +1,4 @@
-# Atlas Core Marketing Video Design
+# Atlas Core Editor Marketing Video Design
 
 ## Style Prompt
 

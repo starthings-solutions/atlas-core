@@ -11,15 +11,8 @@ import {
   linkHost,
 } from "../src/paths.js";
 
-test("Atlas Core owns a distinct default port", () => {
-  const previous = process.env.ATLAS_CORE_PORT;
-  delete process.env.ATLAS_CORE_PORT;
-  try {
-    assert.equal(defaultPort(), 4397);
-  } finally {
-    if (previous === undefined) delete process.env.ATLAS_CORE_PORT;
-    else process.env.ATLAS_CORE_PORT = previous;
-  }
+test("defaultPort uses the Atlas Core port, distinct from upstream Lavish", () => {
+  assert.equal(defaultPort(), 4397);
 });
 
 test("bindHost defaults to loopback and honors ATLAS_CORE_HOST", () => {

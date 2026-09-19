@@ -24,30 +24,23 @@ await esbuild.build({
 await chmod("dist/cli.mjs", 0o755);
 await copyFile("src/chrome-client.js", "dist/chrome-client.js");
 await copyFile("src/chrome.css", "dist/chrome.css");
-const chromeFonts = [
-  [
-    "node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2",
-    "archivo-latin-wdth-normal.woff2",
-  ],
-  [
-    "node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2",
-    "ibm-plex-mono-latin-400-normal.woff2",
-  ],
-  [
-    "node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2",
-    "ibm-plex-mono-latin-500-normal.woff2",
-  ],
-  [
-    "node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2",
-    "ibm-plex-mono-latin-600-normal.woff2",
-  ],
-];
-await mkdir("dist/chrome-fonts", { recursive: true });
-for (const [source, name] of chromeFonts) await copyFile(source, `dist/chrome-fonts/${name}`);
 await mkdir("dist/design", { recursive: true });
 await copyFile("node_modules/daisyui/daisyui.css", "dist/design/daisyui.css");
 await copyFile("node_modules/daisyui/themes.css", "dist/design/daisyui-themes.css");
 await copyFile("node_modules/@tailwindcss/browser/dist/index.global.js", "dist/design/tailwindcss-browser.js");
+
+// Chrome type: Archivo (variable width + weight) and IBM Plex Mono vendored from
+// fontsource so the review surface renders deterministically offline.
+await mkdir("dist/fonts", { recursive: true });
+for (const file of [
+  "@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2",
+  "@fontsource-variable/archivo/files/archivo-latin-ext-wdth-normal.woff2",
+  "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2",
+  "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2",
+  "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2",
+]) {
+  await copyFile(`node_modules/${file}`, `dist/fonts/${file.split("/").pop()}`);
+}
 
 // Whiteboard frame: a self-contained browser bundle (Excalidraw + the Mermaid
 // converter + its exactly-pinned mermaid + React) served from

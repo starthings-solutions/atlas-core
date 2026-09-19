@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -39,50 +39,9 @@ async function waitForHealth(base, child, output) {
   throw new Error(`server did not become healthy\n${output.join("")}`);
 }
 
-async function packageCliEntry(root) {
-  const sourceEntries = (await readdir(path.join(root, "bin"))).filter((name) => name.endsWith(".js"));
-  if (sourceEntries.length === 1) return path.join(root, "bin", sourceEntries[0]);
-  const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-  const entry = typeof packageJson.bin === "string" ? packageJson.bin : Object.values(packageJson.bin || {})[0];
-  if (typeof entry !== "string" || entry.length === 0) throw new Error(`package at ${root} has no CLI entry`);
-  return path.join(root, entry);
-}
-
-async function rebrandArchivedFixture(root) {
-  const manifestPath = path.join(root, "package.json");
-  const manifestSource = await readFile(manifestPath, "utf8");
-  const manifest = JSON.parse(manifestSource);
-  const legacyPackage = String(manifest.name || "");
-  const legacyStem = legacyPackage.replace(/-axi$/, "");
-  const legacyEnvironment = legacyPackage.toUpperCase().replaceAll("-", "_");
-  const replacements = [
-    [legacyEnvironment, "ATLAS_CORE"],
-    [legacyPackage, "atlas-core"],
-    [legacyStem, "atlas"],
-  ].filter(([from]) => from);
-
-  async function rewriteFile(file) {
-    let source = await readFile(file, "utf8");
-    for (const [from, to] of replacements) source = source.replaceAll(from, to);
-    await writeFile(file, source);
-  }
-
-  async function rewriteDirectory(directory) {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const target = path.join(directory, entry.name);
-      if (entry.isDirectory()) await rewriteDirectory(target);
-      else if (entry.isFile() && entry.name.endsWith(".js")) await rewriteFile(target);
-    }
-  }
-
-  await rewriteFile(manifestPath);
-  await rewriteDirectory(path.join(root, "bin"));
-  await rewriteDirectory(path.join(root, "src"));
-}
-
 async function startServer(root, env, port) {
   const output = [];
-  const child = spawn(process.execPath, [await packageCliEntry(root), "server", "--port", String(port)], {
+  const child = spawn(process.execPath, [path.join(root, "bin/atlas-core.js"), "server", "--port", String(port)], {
     cwd: root,
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
@@ -157,34 +116,6 @@ test(
       CHROME_DEVTOOLS_AXI_SESSION: `atlas-event-transport-${process.pid}`,
       CHROME_DEVTOOLS_AXI_USER_DATA_DIR: path.join(temp, "chrome"),
     };
-
-    // A stopped legacy tab reloads on its explicit banner action. AXI 0.1.34 can retain the
-    // pre-navigation execution context briefly, so reselect the tab and use short synchronous
-    // probes instead of holding one evaluation open across that navigation.
-    async function waitForLiveReply(url, text) {
-      const deadline = Date.now() + 10_000;
-      let last = "";
-      while (Date.now() < deadline) {
-        const page = pageRows(run("chrome-devtools-axi", ["pages"], chromeEnv)).find(
-          (candidate) => candidate.url === url,
-        );
-        if (page) {
-          run("chrome-devtools-axi", ["selectpage", String(page.id)], chromeEnv);
-          const result = spawnSync(
-            "chrome-devtools-axi",
-            [
-              "eval",
-              `() => Boolean(window.__atlasChromeReady && document.getElementById("chatLog")?.textContent.includes(${JSON.stringify(text)}))`,
-            ],
-            { cwd: repoRoot, env: { ...process.env, ...chromeEnv }, encoding: "utf8", timeout: 5_000 },
-          );
-          last = `${result.stdout || ""}${result.stderr || ""}`;
-          if (!result.error && result.status === 0 && /result:\s*"?true"?/.test(last)) return last;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-      throw new Error(`live event did not arrive after reselecting ${url}\n${last}`);
-    }
     const sessions = [];
     let oldServer;
     let currentServer;
@@ -193,9 +124,7 @@ test(
       await mkdir(oldRoot);
       run("git", ["archive", "--format=tar", "--output", archive, baseCommit], atlasEnv);
       run("tar", ["-xf", archive, "-C", oldRoot], atlasEnv);
-      await rebrandArchivedFixture(oldRoot);
       await symlink(path.join(repoRoot, "node_modules"), path.join(oldRoot, "node_modules"), "dir");
-      const oldCliEntry = await packageCliEntry(oldRoot);
       oldServer = await startServer(oldRoot, atlasEnv, port);
 
       for (let index = 0; index < 7; index += 1) {
@@ -204,7 +133,13 @@ test(
           file,
           `<!doctype html><title>Board ${index + 1}</title><main id="board-${index + 1}">Board ${index + 1}</main>`,
         );
-        const output = run(process.execPath, [oldCliEntry, file, "--no-open", "--no-gate"], atlasEnv, 20_000, oldRoot);
+        const output = run(
+          process.execPath,
+          ["bin/atlas-core.js", file, "--no-open", "--no-gate"],
+          atlasEnv,
+          20_000,
+          oldRoot,
+        );
         const url = output.match(/url:\s*"([^"]+)"/)?.[1];
         assert.ok(url, output);
         sessions.push({ file, url, key: new URL(url).pathname.split("/").pop() });
@@ -284,7 +219,7 @@ test(
             chromeEnv,
             12_000,
           );
-          assert.match(protectedDraft, /was stopped\. Reload after you start it again\./);
+          assert.match(protectedDraft, /no longer running/);
           assert.doesNotMatch(protectedDraft, /updated/);
           run("chrome-devtools-axi", ["eval", '() => document.getElementById("outdatedReload").click()'], chromeEnv);
         }
@@ -318,7 +253,15 @@ test(
           body: JSON.stringify({ text: liveReply }),
         });
         assert.equal(reply.status, 200);
-        const observed = await waitForLiveReply(session.url, liveReply);
+        const observed = run(
+          "chrome-devtools-axi",
+          [
+            "eval",
+            `() => new Promise((resolve, reject) => { const deadline = Date.now() + 8000; const check = () => { if (document.getElementById("chatLog").textContent.includes(${JSON.stringify(liveReply)})) return resolve(true); if (Date.now() >= deadline) return reject(new Error("live event did not arrive")); setTimeout(check, 25); }; check(); })`,
+          ],
+          chromeEnv,
+          10_000,
+        );
         assert.match(observed, /result:\s*"?true"?/, `board ${index + 1} live event channel stayed connected`);
 
         const message = `seven-tab-message-${index + 1}`;

@@ -1,3 +1,12 @@
+import {
+  OLED_ARTIFACT_SNIPPET,
+  OLED_CATEGORICAL,
+  OLED_CATEGORICAL_ORDER,
+  OLED_DAISYUI_THEME_CSS,
+  OLED_DAISYUI_THEME_NAME,
+  OLED_FONTS_SNIPPET,
+  OLED_GOOGLE_FONTS_HREF,
+} from "./oled-tokens.js";
 import { listPlaybooks, PLAYBOOK_ROUTER_INSTRUCTION } from "./playbooks.js";
 
 export const TAILWIND_BROWSER_VERSION = "4.2.4";
@@ -143,7 +152,7 @@ export const LAYOUT_SAFETY_CSS_SNIPPET = `<style>
 // summary, and the design command help. The installable skill does not embed this rule;
 // it points at `atlas-core design`. Edit the rule here only.
 export const DESIGN_PRIORITY_RULE =
-  "Decide the design direction in this strict priority order, and only move to the next step when the current one truly yields nothing: (1) if the user asked for a specific look or named design system, use that; (2) otherwise you must first inspect the project the artifact is about - the subject or product whose content or UI it represents, which may differ from your current working directory - and match that project's design system: Tailwind or theme config, shared CSS variables or design tokens, component library, brand assets, or existing styled pages. If the artifact previews, proposes, or mocks a specific app's UI, render it in that app's own design system so it faithfully shows the product, even when you are running in a different repo; (3) only when both steps come up empty, use the Atlas Core-recommended Tailwind CSS browser runtime v4 + DaisyUI v5, available via CDN, and prefer that CDN snippet over hand-writing styles unless explicitly instructed otherwise by the user.";
+  "Decide the design direction in this strict priority order, and only move to the next step when the current one truly yields nothing: (1) if the user asked for a specific look or named design system, use that; (2) otherwise you must first inspect the project the artifact is about - the subject or product whose content or UI it represents, which may differ from your current working directory - and match that project's design system: Tailwind or theme config, shared CSS variables or design tokens, component library, brand assets, or existing styled pages. If the artifact previews, proposes, or mocks a specific app's UI, render it in that app's own design system so it faithfully shows the product, even when you are running in a different repo; (3) only when both steps come up empty, use the Atlas Core OLED default: Tailwind CSS browser runtime v4 + DaisyUI v5 via the CDN snippet below, plus the OLED head snippet (Archivo + IBM Plex Mono fonts and the atlas-core-oled theme) with `<html data-theme=\"atlas-core-oled\">`. Prefer those snippets over hand-writing styles unless explicitly instructed otherwise by the user.";
 
 export const DESIGN_SYSTEM_HINT =
   "Atlas Core does not auto-inject any design system - artifacts stay portable so they render identically when opened directly without atlas-core running. Before writing any HTML: " +
@@ -151,6 +160,10 @@ export const DESIGN_SYSTEM_HINT =
   " Run `atlas-core design` for a content-to-playbook router, a copy-pasteable CDN snippet, the whiteboard (Mermaid) opt-in snippet, and the DaisyUI component reference. When you deliver the artifact, state which of the three design sources you used and why.";
 
 export const DAISYUI_THEMES = [
+  // Atlas Core OLED first: it is the default for new artifacts. Unlike the
+  // builtins below (shipped by DaisyUI's themes.css), it is defined by the
+  // OLED head snippet, so paste that snippet whenever you use this theme.
+  OLED_DAISYUI_THEME_NAME,
   "light",
   "dark",
   "cupcake",
@@ -194,11 +207,24 @@ export function createDesignOutput() {
       instruction: PLAYBOOK_ROUTER_INSTRUCTION,
       playbooks: listPlaybooks(),
     },
+    oled: {
+      summary:
+        'The Atlas Core OLED default for new artifacts: pure-black canvas, 1px wires, 2-3px radii, Archivo text with IBM Plex Mono metadata/numbers/code, Sunset Calm UI states, and a separate categorical data palette. Paste the head snippet below into your `<head>` (after the CDN snippet) and set `<html data-theme="atlas-core-oled">`. Atlas Core does not auto-inject any of this; artifacts stay portable HTML.',
+      theme_name: OLED_DAISYUI_THEME_NAME,
+      head_snippet: OLED_ARTIFACT_SNIPPET,
+      fonts_snippet: OLED_FONTS_SNIPPET,
+      fonts_url: OLED_GOOGLE_FONTS_HREF,
+      theme_css: OLED_DAISYUI_THEME_CSS,
+      categorical_slots: { ...OLED_CATEGORICAL },
+      categorical_order: [...OLED_CATEGORICAL_ORDER],
+      categorical_rule:
+        "Charts and diagrams use ONLY --c1..--c5, in operating order c1, c3, c4, c5: white (--c1) is the dominant series ink, and --c2 doubles as the risk ink so it never paints a neutral category. Color follows the entity, never the interface state; every state also carries a text label, a shape/texture, and a count, so nothing depends on color alone.",
+    },
     design: {
       summary:
         "Use this Atlas Core CDN fallback only if (1) the user gave no design direction and (2) you already inspected the project the artifact is about and found no design system or style conventions to match. If you have not checked the subject project yet, check first. Atlas Core does not auto-inject any design system; artifacts stay portable HTML. Paint an explicit page background and readable text. " +
         DESIGN_PRIORITY_RULE +
-        " Paste the CDN snippet below into your `<head>`.",
+        " Paste the CDN snippet below into your `<head>`, then the OLED head snippet from the `oled` section.",
       cdn_snippet: DESIGN_CDN_SNIPPET,
       cdn_urls: DESIGN_CDN_URLS,
       versions: { tailwind: TAILWIND_BROWSER_VERSION, daisyui: DAISYUI_VERSION },
@@ -219,10 +245,12 @@ export function createDesignOutput() {
       versions: { mermaid: MERMAID_VERSION },
     },
     theme_usage: [
-      'Default to `<html data-theme="luxury">` - it matches the Atlas Core look. Pick a different theme from the list below only when the user asked for one or the content clearly calls for it.',
+      'Default to `<html data-theme="atlas-core-oled">` with the OLED head snippet pasted into `<head>` - it is the Atlas Core look: void-black page, panel surfaces, Sunset Calm states, Archivo + IBM Plex Mono. Pick a different theme from the list below only when the user asked for one or the content clearly calls for it.',
       'Set a nested section theme with `<section data-theme="night">`.',
       "Prefer semantic colors such as `bg-base-100`, `bg-base-200`, `text-base-content`, `bg-primary`, `text-primary-content`, `alert-warning`, and `btn-primary` so themes remain readable.",
       "Avoid hardcoded Tailwind color names for text and surfaces unless the user asked for exact colors.",
+      "Charts and inline-SVG diagrams use the categorical slots from the `oled` section (`--c1`, `--c3`, `--c4`, `--c5` in that order), never the UI state colors and never one color for every series: white is the dominant series ink, and `--c2` is reserved for risk. Pair every color with its label, shape, and count.",
+      "Prefer wire-separated table rows (1px borders, hover surface) over `table-zebra`: zebra striping creates a competing plane on OLED. Status is color plus label plus shape - done resolves to the solid activity seal, never a green.",
       "Use Tailwind responsive prefixes such as `sm:`, `md:`, `lg:`, and `xl:` for layout changes.",
       'Never `@apply` DaisyUI classes (such as `text-base-content/40`, `bg-base-200`, or `btn`) inside `<style type="text/tailwindcss">` - the Tailwind browser runtime does not know them, and one unknown utility aborts the entire compile, leaving the page with no Tailwind styles at all. Put DaisyUI classes directly on elements, or write plain CSS with theme variables such as `var(--color-base-200)`.',
     ],

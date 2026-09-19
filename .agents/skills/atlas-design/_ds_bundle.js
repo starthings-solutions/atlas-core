@@ -1,8 +1,8 @@
-/* @ds-bundle: {"format":3,"namespace":"AtlasCoreDesignSystem_019e18","components":[],"sourceHashes":{"ui_kits/editor/AnnotationCard.jsx":"337f5a7e05e5","ui_kits/editor/Artifact.jsx":"78900dc61669","ui_kits/editor/Bubbles.jsx":"9ef6c4683be2","ui_kits/editor/ChatPanel.jsx":"d48d1025c885","ui_kits/editor/Pills.jsx":"036cd5cad301","ui_kits/editor/TopBar.jsx":"0480d627a382","ui_kits/editor/app.jsx":"c8c1b2c616d5","ui_kits/editor/design-canvas.jsx":"6a191bf0305f","ui_kits/editor/options-app-v2.jsx":"3161094fd814","ui_kits/editor/options-app-v3.jsx":"7712a504d33a","ui_kits/editor/options-app.jsx":"f98ec7d5f23c","ui_kits/editor/options-chrome-v2.jsx":"2019ede08911","ui_kits/editor/options-chrome-v3.jsx":"cac73025b895","ui_kits/editor/options-chrome.jsx":"d4c5bd49aeae"},"inlinedExternals":[],"unexposedExports":[]} */
+/* @ds-bundle: {"format":3,"namespace":"Atlas CoreDesignSystem_019e18","components":[],"sourceHashes":{"ui_kits/editor/AnnotationCard.jsx":"e4ef246fc207","ui_kits/editor/Artifact.jsx":"af55469055a1","ui_kits/editor/Bubbles.jsx":"685612381332","ui_kits/editor/ChatPanel.jsx":"b8fa493fc85d","ui_kits/editor/Pills.jsx":"036cd5cad301","ui_kits/editor/TopBar.jsx":"3538d0a0dad7","ui_kits/editor/app.jsx":"a70747413714","ui_kits/editor/design-canvas.jsx":"bd8746af6e58","ui_kits/editor/options-app-v2.jsx":"3161094fd814","ui_kits/editor/options-app-v3.jsx":"7712a504d33a","ui_kits/editor/options-app.jsx":"f98ec7d5f23c","ui_kits/editor/options-chrome-v2.jsx":"f940622d3bce","ui_kits/editor/options-chrome-v3.jsx":"cac73025b895","ui_kits/editor/options-chrome.jsx":"6a2ee48e04af"},"inlinedExternals":[],"unexposedExports":[]} */
 
 (() => {
 
-const __ds_ns = (window.AtlasCoreDesignSystem_019e18 = window.AtlasCoreDesignSystem_019e18 || {});
+const __ds_ns = (window.Atlas CoreDesignSystem_019e18 = window.Atlas CoreDesignSystem_019e18 || {});
 
 const __ds_scope = {};
 
@@ -4144,7 +4144,7 @@ Object.assign(window, {
 try { (() => {
 /* global React */
 // Mock chrome renderers for the "reduce button noise" exploration.
-// Each renders a small, static Atlas Core chrome at artboard scale.
+// Each renders a small, static Atlas Core Editor chrome at artboard scale.
 // Shared bits live here; the four variants compose them differently.
 
 const mc = {

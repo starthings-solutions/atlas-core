@@ -1,5 +1,5 @@
 // Generates the root plugin.json from package.json so the Agent Plugins manifest never
-// drifts from the source distribution identity.
+// drifts from the published package identity.
 //
 //   node scripts/build-plugin.js          # write the file
 //   node scripts/build-plugin.js --check  # fail (exit 1) if the committed file is stale

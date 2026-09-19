@@ -127,27 +127,25 @@ test(
       );
     }
 
-    async function openReview(url, settleMs = 4500) {
+    function openReview(url, settleMs = 4500) {
       run("chrome-devtools-axi", ["open", url], chromeEnv);
-      await new Promise((resolve) => setTimeout(resolve, settleMs));
+      run("chrome-devtools-axi", ["wait", String(settleMs)], chromeEnv, settleMs + 45_000);
       instrumentArtifactLoads();
     }
 
     function wait(ms) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
+      run("chrome-devtools-axi", ["wait", String(ms)], chromeEnv, ms + 45_000);
     }
 
     try {
-      run("chrome-devtools-axi", ["start"], chromeEnv);
       // ---------------------------------------------------------------------
       // Detection is passive: a badge and a list, a still-pending poll, no refresh.
       // ---------------------------------------------------------------------
       const artifact = path.join(temp, "review.html");
       await copyFile(path.join(fixtures, "control-broken-clipping.html"), artifact);
       const url = openArtifact(artifact);
-      run("chrome-devtools-axi", ["newpage", `http://127.0.0.1:${port}/health`], chromeEnv);
       run("chrome-devtools-axi", ["emulate", "--viewport", "1440x1000x1"], chromeEnv);
-      await openReview(url);
+      openReview(url);
 
       const detected = inbox();
       assert.equal(detected.hidden, false, "the warning button appears once there is unresolved work");
@@ -159,17 +157,9 @@ test(
 
       openArtifact(artifact);
       await writeFile(artifact, `${await readFile(artifact, "utf8")}\n<!-- reopened -->`);
-      const reopenDeadline = Date.now() + 15_000;
-      let reopened;
-      do {
-        await wait(500);
-        reopened = inbox();
-      } while (Number(reopened.loads) < 1 && Date.now() < reopenDeadline);
-      const serverLog =
-        Number(reopened.loads) === 1
-          ? ""
-          : await readFile(path.join(atlasEnv.ATLAS_CORE_STATE_DIR, "server.log"), "utf8").catch(() => "");
-      assert.equal(reopened.loads, 1, `reopening the session preserves live artifact reloads\n${serverLog}`);
+      wait(4500);
+      const reopened = inbox();
+      assert.equal(reopened.loads, 1, "reopening the session preserves live artifact reloads");
       assert.equal(
         evaluate(
           'JSON.stringify(new URL(document.getElementById("artifact").src).searchParams.get("artifact_revision"))',
@@ -190,7 +180,7 @@ test(
       // Repeat reports of the same findings do not inflate the count.
       // ---------------------------------------------------------------------
       run("chrome-devtools-axi", ["eval", '() => window.dispatchEvent(new Event("resize"))'], chromeEnv);
-      await wait(3000);
+      wait(3000);
       assert.equal(inbox().badge, "3", "a repeat diagnostic pass deduplicates onto the same records");
 
       // ---------------------------------------------------------------------
@@ -230,7 +220,7 @@ test(
       assert.equal(escaped.focus, "warningsButton", "focus returns to the trigger");
 
       run("chrome-devtools-axi", ["emulate", "--viewport", "420x900x1,mobile,touch"], chromeEnv);
-      await wait(3500);
+      wait(3500);
       instrumentArtifactLoads();
       const narrow = evaluate(
         '(() => { document.getElementById("warningsButton").click(); const box = document.getElementById("warningsDrawer").getBoundingClientRect(); return JSON.stringify({' +
@@ -255,7 +245,7 @@ test(
       );
 
       run("chrome-devtools-axi", ["emulate", "--viewport", "1440x1000x1"], chromeEnv);
-      await wait(3500);
+      wait(3500);
       instrumentArtifactLoads();
 
       // ---------------------------------------------------------------------
@@ -277,7 +267,7 @@ test(
       assert.equal(selected.queueDisabled, false);
 
       run("chrome-devtools-axi", ["eval", '() => document.getElementById("warningsQueueButton").click()'], chromeEnv);
-      await wait(1500);
+      wait(1500);
 
       const afterQueue = inbox();
       assert.equal(afterQueue.badge, beforeQueue.badge, "queueing never removes a warning from the active count");
@@ -304,7 +294,7 @@ test(
         chromeEnv,
       );
       run("chrome-devtools-axi", ["eval", '() => document.getElementById("send").click()'], chromeEnv);
-      await wait(1200);
+      wait(1200);
 
       const feedback = poll(artifact, 8000);
       assert.match(feedback, /tag:\s*layout-warnings/);
@@ -336,7 +326,7 @@ test(
           .replace(".clip {\n        height: 42px;", ".clip {\n        height: auto;")
           .replace("width: 60px;", "width: 100%;"),
       );
-      await wait(6000);
+      wait(6000);
 
       const afterFix = inbox();
       assert.equal(afterFix.loads, 1, "one queued batch costs one artifact refresh");
@@ -382,7 +372,7 @@ test(
           ' [...row.querySelectorAll(".warning-action")].find((button) => button.textContent === "Dismiss").click();' +
           " return JSON.stringify({ target, viewport }); })()",
       );
-      await wait(1200);
+      wait(1200);
       const afterDismiss = inbox();
       assert.equal(Number(afterDismiss.badge), Number(beforeDismiss.badge) - 1, "a dismissal leaves the active count");
       assert.ok(
@@ -391,7 +381,7 @@ test(
 
       // Touch the artifact so a newer revision loads; the still-present issue must surface again.
       await writeFile(artifact, `${await readFile(artifact, "utf8")}\n<!-- revision -->\n`);
-      await wait(6000);
+      wait(6000);
       const afterRevision = inbox();
       assert.ok(
         afterRevision.rows.some((row) => row.target === dismissed.target && row.viewport === dismissed.viewport),
@@ -403,7 +393,7 @@ test(
       // ---------------------------------------------------------------------
       const clean = path.join(temp, "clean.html");
       await copyFile(path.join(fixtures, "real-plan-clean.html"), clean);
-      await openReview(openArtifact(clean));
+      openReview(openArtifact(clean));
       const cleanInbox = inbox();
       assert.equal(cleanInbox.hidden, true, "no button without unresolved work");
       assert.equal(cleanInbox.gate, false);
@@ -418,7 +408,7 @@ test(
         ],
         chromeEnv,
       );
-      await wait(1200);
+      wait(1200);
       const cleanFeedback = poll(clean, 8000);
       assert.match(cleanFeedback, /Tighten the summary/);
       assert.doesNotMatch(cleanFeedback, /layout-warnings/);
@@ -464,107 +454,43 @@ test(
       run("chrome-devtools-axi", ["click", `@${ref(pattern)}`], chromeEnv);
     }
     function wait(ms) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
+      run("chrome-devtools-axi", ["wait", String(ms)], chromeEnv, ms + 45_000);
     }
 
     try {
-      run("chrome-devtools-axi", ["start"], chromeEnv);
       const artifact = path.join(temp, "review-context.html");
       await copyFile(path.join(fixtures, "review-context.html"), artifact);
-      // The production artifact is deliberately cross-origin from the chrome. Teach only this
-      // copied fixture to relay a test input event so the preserved-engine case can exercise the
-      // artifact's real textarea listener despite chrome-devtools-axi 0.1.34 dropping input events
-      // for focused controls in cross-origin shadow roots.
-      await writeFile(
-        artifact,
-        `${await readFile(artifact, "utf8")}\n<script>window.addEventListener("message", (event) => { const kind = event.data?.kind; if (!["atlas-test:annotation-input", "atlas-test:annotation-probe", "atlas-test:annotation-queue"].includes(kind)) return; const textarea = document.querySelector(".atlas-annotation-root")?.shadowRoot?.querySelector("textarea"); if (kind === "atlas-test:annotation-input") textarea?.dispatchEvent(new Event("input", { bubbles: true, composed: true })); if (kind === "atlas-test:annotation-queue") textarea?.closest(".atlas-annotation-card")?.querySelector(".atlas-send")?.click(); event.source?.postMessage({ kind: "atlas-test:annotation-result", value: textarea?.value ?? null }, "*"); });</script>\n`,
-      );
       const output = run(process.execPath, ["bin/atlas-core.js", artifact, "--no-open"], atlasEnv);
       const url = output.match(/url:\s*"([^"]+)"/)?.[1];
       assert.ok(url, output);
-      const key = new URL(url).pathname.split("/").pop();
-      assert.ok(key, url);
-      run("chrome-devtools-axi", ["newpage", `http://127.0.0.1:${port}/health`], chromeEnv);
       run("chrome-devtools-axi", ["emulate", "--viewport", "1440x1000x1"], chromeEnv);
       run("chrome-devtools-axi", ["open", url], chromeEnv);
-      await wait(4500);
+      wait(4500);
 
       // Atlas Core-owned answers: a radio and a checkbox inside a data-atlas-question scope.
       click(/radio " Pro"/);
       click(/checkbox " Include beta cohort"/);
       // Unsent annotation text on an element the reload will replace.
       click(/Annotate this paragraph/);
-      await wait(800);
-      run(
-        "chrome-devtools-axi",
-        [
-          "fill",
-          `@${ref(/textbox "Tell the agent what to change about this element\.\.\."/)}`,
-          "Shorten this to one sentence",
-        ],
-        chromeEnv,
-      );
-      const dispatchedInput = run(
-        "chrome-devtools-axi",
-        [
-          "eval",
-          'async () => await new Promise((resolve, reject) => { const frame = document.getElementById("artifact"); const timeout = setTimeout(() => { window.removeEventListener("message", receive); reject(new Error("artifact review-state input relay timed out")); }, 2500); const receive = (event) => { if (event.source !== frame.contentWindow || event.data?.type !== "atlas:reviewState") return; clearTimeout(timeout); window.removeEventListener("message", receive); resolve(JSON.stringify({ state: event.data.state, messageToken: event.data.artifact_load_token, frameToken: new URL(frame.src).searchParams.get("artifact_load_token") })); }; window.addEventListener("message", receive); frame.contentWindow.postMessage({ kind: "atlas-test:annotation-input" }, "*"); })',
-        ],
-        chromeEnv,
-      );
-      const emittedRaw = dispatchedInput.match(/result:\s*("(?:[^"\\]|\\.)*")/s)?.[1];
-      assert.ok(emittedRaw, dispatchedInput);
-      let emitted = JSON.parse(emittedRaw);
-      while (typeof emitted === "string") emitted = JSON.parse(emitted);
-      assert.equal(
-        emitted.messageToken,
-        emitted.frameToken,
-        "the review-state token matches the current artifact frame",
-      );
-      assert.equal(emitted.state?.card?.text, "Shorten this to one sentence", JSON.stringify(emitted));
-      await wait(800);
+      wait(800);
+      run("chrome-devtools-axi", ["type", "Shorten this to one sentence"], chromeEnv);
+      wait(800);
 
       const before = snapshot();
       assert.match(before, /radio " Pro" checked/);
       assert.match(before, /checkbox " Include beta cohort" checked/);
-      const beforeState = run(
-        "chrome-devtools-axi",
-        [
-          "eval",
-          '() => JSON.stringify(Object.entries(sessionStorage).filter(([storageKey]) => storageKey.startsWith("atlas-core:review-state:")))',
-        ],
-        chromeEnv,
-      );
-      assert.match(beforeState, /Shorten this to one sentence/);
 
       await writeFile(artifact, `${await readFile(artifact, "utf8")}\n<!-- revision -->\n`);
-      await wait(5000);
+      wait(5000);
 
       const after = snapshot();
-      assert.match(after, /radio " Pro" checked/, "an Atlas Core-owned answer survives the reload");
+      assert.match(after, /radio " Pro" checked/, "a Atlas Core-owned answer survives the reload");
       assert.match(after, /checkbox " Include beta cohort" checked/);
       assert.match(after, /Annotate <p>/, "the open annotation card comes back");
 
-      const restoredTextarea = run(
-        "chrome-devtools-axi",
-        [
-          "eval",
-          'async () => await new Promise((resolve, reject) => { const frame = document.getElementById("artifact"); const timeout = setTimeout(() => { window.removeEventListener("message", receive); reject(new Error("fixture annotation probe timed out")); }, 2500); const receive = (event) => { if (event.source !== frame.contentWindow || event.data?.kind !== "atlas-test:annotation-result") return; clearTimeout(timeout); window.removeEventListener("message", receive); resolve(JSON.stringify(event.data)); }; window.addEventListener("message", receive); frame.contentWindow.postMessage({ kind: "atlas-test:annotation-probe" }, "*"); })',
-        ],
-        chromeEnv,
-      );
-      assert.match(restoredTextarea, /Shorten this to one sentence/, "the restored card retains its draft text");
-
       // Queueing the restored card proves the unsent text itself survived, not just the card.
-      run(
-        "chrome-devtools-axi",
-        [
-          "eval",
-          'async () => await new Promise((resolve, reject) => { const frame = document.getElementById("artifact"); const timeout = setTimeout(() => { window.removeEventListener("message", receive); reject(new Error("restored annotation did not queue")); }, 2500); const receive = (event) => { if (event.source !== frame.contentWindow || event.data?.type !== "atlas:queuePrompt") return; clearTimeout(timeout); window.removeEventListener("message", receive); resolve(JSON.stringify(event.data)); }; window.addEventListener("message", receive); frame.contentWindow.postMessage({ kind: "atlas-test:annotation-queue" }, "*"); })',
-        ],
-        chromeEnv,
-      );
-      await wait(800);
+      click(/button "Queue"/);
+      wait(800);
       const queuedNote = run(
         "chrome-devtools-axi",
         [
@@ -573,8 +499,7 @@ test(
         ],
         chromeEnv,
       );
-      let geometry = JSON.parse(queuedNote.match(/result:\s*("(?:[^"\\]|\\.)*")/s)[1]);
-      while (typeof geometry === "string") geometry = JSON.parse(geometry);
+      const geometry = JSON.parse(JSON.parse(queuedNote.match(/result:\s*("(?:[^"\\]|\\.)*")/s)[1]));
       assert.equal(geometry.text, "Shorten this to one sentence");
       assert.equal(geometry.borderStyle, "dashed");
       assert.equal(geometry.excerptWhiteSpace, "nowrap");

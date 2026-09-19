@@ -1,9 +1,9 @@
 dist
 node_modules
-.atlas
-.atlas-core
+.lavish
+.lavish-axi
 .no-mistakes
-atlas-code-review.html
+lavish-code-review.html
 package-lock.json
 CHANGELOG.md
 plugin.json

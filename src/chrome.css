@@ -1,34 +1,63 @@
+/* Chrome type, served from /fonts (vendored by scripts/build.js, falling back to the
+   fontsource packages for source runs): variable Archivo for text, Plex Mono 400/500/600
+   for labels, numbers, and code. The SDK card and whiteboard frame share these stacks but
+   resolve them to system fonts - sandboxed frames cannot reach the loopback server. */
 @font-face {
   font-family: "Archivo";
-  src: url("/chrome-fonts/archivo-latin-wdth-normal.woff2") format("woff2");
   font-style: normal;
+  font-display: swap;
   font-weight: 100 900;
   font-stretch: 62% 125%;
+  src: url("/fonts/archivo-latin-wdth-normal.woff2") format("woff2-variations");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
   font-display: swap;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  src: url("/fonts/archivo-latin-ext-wdth-normal.woff2") format("woff2-variations");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 @font-face {
   font-family: "IBM Plex Mono";
-  src: url("/chrome-fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
   font-style: normal;
+  font-display: swap;
   font-weight: 400;
-  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "IBM Plex Mono";
-  src: url("/chrome-fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
   font-style: normal;
+  font-display: swap;
   font-weight: 500;
-  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "IBM Plex Mono";
-  src: url("/chrome-fonts/ibm-plex-mono-latin-600-normal.woff2") format("woff2");
   font-style: normal;
-  font-weight: 600;
   font-display: swap;
+  font-weight: 600;
+  src: url("/fonts/ibm-plex-mono-latin-600-normal.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
-
 :root {
+  /* Atlas Core OLED contract (mirrors src/oled-tokens.js): void-black canvas, 1px wires,
+     2-3px radii, Archivo + IBM Plex Mono, Sunset Calm UI states. The categorical data
+     slots ride along for reference but never back a component state. */
   --void: #000000;
   --surface: #080808;
   --surface-2: #101010;
@@ -37,34 +66,61 @@
   --rule-2: #2e2e2e;
   --ink-3: #787878;
   --ink-2: #a3a3a3;
+  --ink: #ffffff;
+  --hollow: #6a6a6a;
+  --c1: #ffffff;
+  --c2: #f5451b;
+  --c3: #0091c8;
+  --c4: #00a06b;
+  --c5: #9463ff;
   --app-ink: #f8f4eb;
   --app-feedback: #ffb386;
   --app-risk: #f87171;
   --app-pending: #f2c14e;
   --app-activity: #6fc7c2;
-  --bg: var(--void);
-  --bg-panel: var(--surface);
-  --bg-bar: var(--surface-2);
-  --bg-elevated: var(--surface-2);
-  --fg: var(--app-ink);
-  --fg-muted: var(--ink-2);
-  --fg-dim: var(--ink-2);
-  --fg-faint: var(--ink-3);
-  --fg-label: var(--ink-3);
-  --border: var(--rule-2);
-  --border-subtle: var(--rule);
-  --border-strong: var(--dim);
-  --border-interactive: var(--ink-3);
-  --accent: var(--app-activity);
-  --accent-hover: var(--app-ink);
-  --accent-ink: #000000;
-  --danger: var(--app-risk);
-  --pending: var(--app-pending);
-  --feedback: var(--app-feedback);
-  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-sans);
-  --font-display: var(--font-sans);
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --veil: rgb(0 0 0 / 0.72);
+  /* Legacy aliases, remapped onto the OLED ramp so every existing component keeps working. */
+  --ink-900: var(--void);
+  --ink-800: var(--surface);
+  --ink-700: var(--void);
+  --ink-600: var(--surface-2);
+  --steel-700: var(--rule);
+  --steel-600: var(--rule-2);
+  --steel-500: var(--ink-3);
+  --steel-400: var(--ink-3);
+  --steel-300: var(--ink-3);
+  --steel-200: var(--ink-2);
+  --steel-100: var(--ink-2);
+  --cream-50: var(--app-ink);
+  --cream-100: var(--app-ink);
+  --cream-200: var(--app-ink);
+  --brass-500: var(--app-activity);
+  --brass-400: var(--app-activity);
+  --brass-ink: var(--void);
+  --sage-900: var(--surface-2);
+  --sage-700: var(--rule-2);
+  --sage-300: var(--app-activity);
+  --amber-900: transparent;
+  --amber-700: var(--app-pending);
+  --rust-500: var(--app-risk);
+  --bg: var(--ink-900);
+  --bg-panel: var(--ink-800);
+  --bg-bar: var(--ink-700);
+  --bg-elevated: var(--ink-600);
+  --fg: var(--cream-100);
+  --fg-muted: var(--steel-100);
+  --fg-dim: var(--steel-200);
+  --fg-faint: var(--steel-300);
+  --fg-label: var(--steel-400);
+  --border: var(--steel-600);
+  --border-subtle: var(--steel-700);
+  --border-strong: var(--steel-500);
+  --accent: var(--brass-500);
+  --accent-hover: var(--brass-400);
+  --accent-ink: var(--brass-ink);
+  --danger: var(--rust-500);
+  --font-sans: "Archivo", ui-sans-serif, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --text-xs: 12px;
   --lh-xs: 1.35;
   --text-sm: 13px;
@@ -110,26 +166,26 @@
   --space-20: 40px;
   --space-24: 48px;
   --space-32: 64px;
-  --radius-sm: 1px;
+  --radius-sm: 2px;
   --radius-md: 2px;
   --radius-lg: 3px;
   --radius-xl: 3px;
-  --radius-pill: 3px;
-  --w-semibold: 600;
+  --radius-pill: 999px;
   --hairline: 1px solid var(--border);
   --hairline-subtle: 1px solid var(--border-subtle);
+  /* OLED carries no shadows: separation is always a wire. The declarations stay so every
+     floating surface keeps its hook; they resolve to nothing. */
   --shadow-tooltip: none;
   --shadow-floating: none;
   --bar-h: 56px;
   --bar-pad: var(--space-8);
-  --rail-w: 48px;
   --panel-w: 360px;
   --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
   --dur-fast: 120ms;
   --dur: 180ms;
   --dur-slow: 320ms;
   --annotate-outline: 2px solid var(--accent);
-  --annotate-offset: 2px;
+  --annotate-offset: 3px;
 }
 * {
   box-sizing: border-box;
@@ -152,6 +208,10 @@ body {
 }
 body.atlas {
   color-scheme: dark;
+}
+::selection {
+  background: var(--app-activity);
+  color: var(--void);
 }
 :focus-visible {
   outline: var(--annotate-outline);
@@ -176,21 +236,23 @@ body.atlas {
   flex-shrink: 0;
 }
 .brand-mark {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-size: 22px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
   color: var(--fg);
 }
+.brand-mark svg {
+  display: block;
+}
 .brand-support {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--fg-muted);
   position: relative;
-  top: 1px;
+  top: 0;
 }
 .spacer {
   flex: 1;
@@ -212,12 +274,18 @@ body.atlas {
 }
 .annotate-switch:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  color: var(--hollow);
+}
+.annotate-switch:disabled .switch-track {
+  background: var(--dim);
+}
+.annotate-switch:disabled .switch-knob {
+  background: var(--hollow);
 }
 .switch-track {
   width: 34px;
   height: 20px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   background: var(--border);
   position: relative;
   flex-shrink: 0;
@@ -229,7 +297,7 @@ body.atlas {
   left: 2px;
   width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   background: var(--fg-faint);
   transition:
     left 150ms var(--ease),
@@ -241,6 +309,56 @@ body.atlas {
 .annotate-switch[aria-pressed="true"] .switch-knob {
   left: 16px;
   background: var(--accent-ink);
+}
+/* Desktop conversation toggle: the wire button that opens the side panel the chrome boots
+   without. The unread dot is the only circle on the bar; screen readers get the same state
+   through the button's label. Hidden on phone widths, where the dock owns the conversation. */
+.conversation-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.conversation-toggle:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+.conversation-toggle[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.conversation-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.conversation-icon svg {
+  display: block;
+}
+.unread-dot {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.unread-dot[hidden] {
+  display: none;
 }
 .visually-hidden {
   position: absolute;
@@ -270,10 +388,10 @@ body.atlas {
   gap: 6px;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid var(--border-interactive);
-  border-radius: var(--radius-lg);
-  background: var(--surface-2);
-  color: var(--pending);
+  border: 1px solid rgb(242 193 78 / 0.35);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--app-pending);
   font-family: inherit;
   font-size: var(--text-sm);
   font-weight: var(--w-bold);
@@ -282,13 +400,14 @@ body.atlas {
 }
 .warnings-button:hover:not(:disabled),
 .warnings-button[aria-expanded="true"] {
-  border-color: var(--pending);
-  background: var(--surface);
-  color: var(--pending);
+  border-color: var(--app-pending);
+  background: transparent;
+  color: var(--app-pending);
 }
 .warnings-button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  color: var(--hollow);
+  border-color: var(--rule-2);
 }
 .warnings-count {
   min-width: 18px;
@@ -297,9 +416,9 @@ body.atlas {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-lg);
-  background: var(--pending);
-  color: #000;
+  border-radius: var(--radius-sm);
+  background: var(--app-pending);
+  color: var(--void);
   font-size: 11px;
   font-weight: var(--w-bold);
   line-height: 1;
@@ -319,9 +438,9 @@ body.atlas {
 }
 .warnings-title {
   margin: 0;
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: var(--text-md);
-  font-weight: var(--w-regular);
+  font-weight: var(--w-semi);
   color: var(--fg);
 }
 .warnings-summary {
@@ -389,7 +508,8 @@ body.atlas {
   border-color: var(--border-strong);
 }
 .warning-row.is-outstanding {
-  background: var(--surface-2);
+  background: var(--ink-700);
+  box-shadow: inset 2px 0 0 var(--app-pending);
 }
 .warning-select {
   width: 14px;
@@ -400,7 +520,7 @@ body.atlas {
 }
 .warning-select:disabled {
   cursor: not-allowed;
-  opacity: 0.4;
+  accent-color: var(--hollow);
 }
 .warning-body {
   min-width: 0;
@@ -430,26 +550,26 @@ body.atlas {
   display: inline-flex;
   align-items: center;
   padding: 2px 6px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
-  background: var(--surface);
+  background: var(--ink-800);
   color: var(--fg-faint);
   font-size: 10px;
   line-height: 1.4;
   white-space: nowrap;
 }
 .warning-chip.severity {
-  border-color: var(--danger);
+  border-color: rgb(248 113 113 / 0.4);
   color: var(--danger);
 }
 .warning-chip.status-queued,
 .warning-chip.status-unverified {
-  border-color: var(--pending);
-  color: var(--pending);
+  border-color: rgb(242 193 78 / 0.4);
+  color: var(--app-pending);
 }
 .warning-chip.status-recurring,
 .warning-chip.status-reopened {
-  border-color: var(--danger);
+  border-color: rgb(248 113 113 / 0.4);
   color: var(--danger);
 }
 .warning-target {
@@ -472,7 +592,7 @@ body.atlas {
   align-items: center;
   gap: 5px;
   padding: 4px 8px;
-  border: 1px solid var(--border-interactive);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg-faint);
@@ -481,15 +601,19 @@ body.atlas {
   cursor: pointer;
 }
 .warning-action:hover:not(:disabled) {
-  border-color: var(--border-interactive);
+  border-color: var(--border-strong);
   color: var(--fg);
 }
 .warning-action:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  color: var(--hollow);
+  border-color: var(--rule);
 }
 .warnings-foot {
   border-top: var(--hairline-subtle);
+  /* The list scrolls under this footer, so lift it with a soft shadow - otherwise a row clipped
+     mid-content at the boundary reads as broken rather than scrollable. */
+  box-shadow: 0 -10px 14px -10px rgba(0, 0, 0, 0.55);
   padding: 10px var(--space-8) 12px;
   display: flex;
   flex-direction: column;
@@ -514,29 +638,30 @@ body.atlas {
   height: 34px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--border-interactive);
+  border: 1px solid var(--border-subtle);
   background: transparent;
   color: var(--fg-dim);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   padding: 0;
 }
 .more-button:hover:not(:disabled),
 .more-button[aria-expanded="true"] {
-  border-color: var(--border-interactive);
-  background: var(--surface-2);
+  border-color: var(--border-strong);
+  background: var(--steel-700);
   color: var(--fg);
 }
 .more-button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  color: var(--hollow);
+  border-color: var(--rule);
 }
 .menu {
   position: absolute;
   background: var(--bg-bar);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: none;
+  box-shadow: var(--shadow-tooltip);
   padding: 6px;
   z-index: 70;
 }
@@ -552,8 +677,9 @@ body.atlas {
   padding: 7px 10px 9px;
 }
 .menu-label {
-  font-size: 9px;
-  font-weight: var(--w-bold);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--w-medium);
   letter-spacing: var(--track-label);
   text-transform: uppercase;
   color: var(--fg-faint);
@@ -564,22 +690,22 @@ body.atlas {
   align-items: center;
   gap: 7px;
   width: calc(100% + 8px);
+  border-radius: var(--radius-sm);
   text-align: left;
   border: 0;
   background: transparent;
   padding: 3px 4px;
   margin: 0 -4px;
-  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--fg-muted);
 }
 .menu-file:hover {
-  background: var(--surface-2);
+  background: var(--steel-700);
 }
 .menu-file > svg {
-  opacity: 0.7;
+  color: var(--ink-3);
   flex-shrink: 0;
 }
 .menu-file-text {
@@ -619,7 +745,7 @@ body.atlas {
   display: none;
 }
 .copy-hint.copied {
-  color: var(--app-activity);
+  color: var(--accent-hover);
 }
 .copy-hint.copied .icon-copy {
   display: none;
@@ -648,21 +774,21 @@ body.atlas {
   color: var(--fg);
 }
 .menu-item:hover:not(:disabled) {
-  background: var(--surface-2);
+  background: var(--steel-700);
 }
 .menu-item:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  color: var(--hollow);
 }
 .menu-item > svg {
-  opacity: 0.8;
+  color: var(--ink-3);
   flex-shrink: 0;
 }
 .menu-item.danger {
   color: var(--danger);
 }
 .menu-item.danger > svg {
-  opacity: 1;
+  color: inherit;
 }
 .menu-item.danger:hover:not(:disabled) {
   background: var(--surface-2);
@@ -671,8 +797,8 @@ body.atlas {
   border: 0;
   border-radius: var(--radius-md);
   padding: 9px 14px;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--app-ink);
+  color: var(--void);
   font-family: inherit;
   font-size: var(--text-sm);
   font-weight: var(--w-bold);
@@ -681,17 +807,18 @@ body.atlas {
   transition:
     background 120ms ease-out,
     color 120ms ease-out,
-    opacity 120ms ease-out,
+    box-shadow 120ms ease-out,
     border-color 120ms ease-out;
 }
 .button:hover:not(:disabled) {
-  background: var(--accent-hover);
+  box-shadow: inset 0 0 0 1px var(--void);
 }
 .button:active:not(:disabled) {
-  opacity: 0.85;
+  box-shadow: inset 0 0 0 2px var(--void);
 }
 .button:disabled {
-  opacity: 0.55;
+  background: var(--rule-2);
+  color: var(--ink-3);
   cursor: not-allowed;
 }
 .button-danger {
@@ -704,6 +831,10 @@ body.atlas {
 .button-danger:hover:not(:disabled) {
   background: var(--surface-2);
 }
+.button-danger:disabled {
+  background: transparent;
+  color: var(--hollow);
+}
 .button-danger > svg {
   flex-shrink: 0;
 }
@@ -714,7 +845,7 @@ body.atlas {
   display: grid;
   place-items: center;
   padding: var(--space-16);
-  background: rgba(0, 0, 0, 0.72);
+  background: var(--veil);
 }
 .share-overlay[hidden] {
   display: none;
@@ -727,7 +858,7 @@ body.atlas {
   border-radius: var(--radius-xl);
   background: var(--bg-panel);
   color: var(--fg);
-  box-shadow: none;
+  box-shadow: var(--shadow-floating);
   padding: var(--space-12);
 }
 .share-head {
@@ -756,10 +887,9 @@ body.atlas {
 }
 .share-head h2 {
   margin: var(--space-2) 0 0;
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: var(--text-2xl);
-  font-style: italic;
-  font-weight: var(--w-regular);
+  font-weight: var(--w-semi);
   line-height: var(--lh-2xl);
 }
 .share-close {
@@ -768,8 +898,8 @@ body.atlas {
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid var(--border-interactive);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg-muted);
   cursor: pointer;
@@ -781,7 +911,7 @@ body.atlas {
 }
 .share-close:hover {
   color: var(--fg);
-  border-color: var(--border-interactive);
+  border-color: var(--border-strong);
 }
 .share-copy,
 .share-note {
@@ -812,9 +942,9 @@ body.atlas {
 .share-result input {
   min-width: 0;
   width: 100%;
-  border: 1px solid var(--border-interactive);
+  border: 1px solid var(--ink-3);
   border-radius: var(--radius-lg);
-  background: var(--bg);
+  background: var(--surface-2);
   color: var(--fg);
   font: inherit;
   font-size: var(--text-base);
@@ -878,7 +1008,7 @@ body.atlas {
 }
 .share-copy-btn {
   flex: none;
-  border: 1px solid var(--border-interactive);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg-muted);
@@ -891,7 +1021,7 @@ body.atlas {
 }
 .share-copy-btn:hover {
   color: var(--fg);
-  border-color: var(--border-interactive);
+  border-color: var(--border-strong);
 }
 .share-actions {
   display: flex;
@@ -900,7 +1030,7 @@ body.atlas {
   margin-top: var(--space-12);
 }
 .share-cancel {
-  border: 1px solid var(--border-interactive);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg-muted);
@@ -912,14 +1042,13 @@ body.atlas {
 }
 .share-cancel:hover {
   color: var(--fg);
-  border-color: var(--border-interactive);
+  border-color: var(--border-strong);
 }
 .layout {
-  position: relative;
   height: calc(100vh - var(--bar-h));
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+  grid-template-columns: minmax(0, 1fr) var(--panel-w);
 }
 .frame {
   min-width: 0;
@@ -936,6 +1065,19 @@ body.atlas {
   min-width: 0;
   min-height: 0;
 }
+/* Desktop conversation collapse: the chrome boots with the panel closed so the artifact owns
+   the viewport, and the bar toggle reopens it side-by-side. Collapsing removes the grid track
+   itself - never an empty column - and display:none keeps the hidden panel out of the focus
+   order without touching messages, drafts, attachments, or annotations. Scoped strictly above
+   the phone breakpoint so the bottom-sheet controller owns narrower viewports alone. */
+@media (min-width: 861px) {
+  body.panel-collapsed .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body.panel-collapsed .panel {
+    display: none;
+  }
+}
 /* Desktop keeps the panel's original flex children: the head wrappers exist only so the phone
    layout can turn the heading into a dock, and they are transparent to layout everywhere else. */
 .panel-head,
@@ -947,102 +1089,6 @@ body.atlas {
 .panel-toggle,
 .panel-scrim {
   display: none;
-}
-.panel-summary {
-  font-family: var(--font-mono);
-}
-.panel-toggle {
-  border: 1px solid var(--border-interactive);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  color: var(--app-activity);
-}
-.panel-summary.is-pending,
-.panel-summary.is-accent {
-  color: var(--pending);
-}
-.panel-summary.is-feedback {
-  color: var(--feedback);
-}
-.panel-summary.is-risk {
-  color: var(--danger);
-}
-.panel-summary.is-activity {
-  color: var(--app-activity);
-}
-@media (min-width: 861px) {
-  .panel {
-    position: absolute;
-    z-index: 30;
-    inset: 0 0 0 auto;
-    width: var(--rail-w);
-    overflow: hidden;
-    transition: width var(--dur) var(--ease);
-  }
-  body.drawer-open .panel {
-    width: min(var(--panel-w), calc(100vw - var(--rail-w)));
-  }
-  .panel-head,
-  .panel-head-row {
-    display: flex;
-  }
-  .panel-head {
-    position: relative;
-    align-self: flex-end;
-    width: var(--panel-w);
-    min-width: var(--panel-w);
-  }
-  .panel-head-row {
-    position: relative;
-    align-items: center;
-    width: 100%;
-    min-height: var(--rail-w);
-    padding-right: var(--rail-w);
-  }
-  .panel-toggle {
-    position: absolute;
-    top: 0;
-    right: 0;
-    display: grid;
-    width: var(--rail-w);
-    height: var(--rail-w);
-    place-items: center;
-  }
-  body:not(.drawer-open) .panel h2 {
-    visibility: hidden;
-  }
-  body:not(.drawer-open) .panel-summary {
-    position: absolute;
-    top: var(--rail-w);
-    right: 0;
-    display: grid;
-    width: var(--rail-w);
-    height: var(--rail-w);
-    place-items: center;
-    overflow: hidden;
-    font-size: 0;
-  }
-  body:not(.drawer-open) .panel-summary::before {
-    content: attr(data-short);
-    font: 600 var(--text-sm) / 1 var(--font-mono);
-  }
-  body.drawer-open .panel-summary {
-    display: block;
-  }
-  .panel-scroll,
-  .composer {
-    width: var(--panel-w);
-    min-width: var(--panel-w);
-    align-self: flex-end;
-    visibility: hidden;
-  }
-  body.drawer-open .panel-scroll,
-  body.drawer-open .composer {
-    visibility: visible;
-  }
-  .panel-scrim {
-    display: none;
-  }
 }
 .panel h2 {
   font-size: 15px;
@@ -1091,9 +1137,8 @@ body.atlas {
 }
 .bubble.user {
   align-self: flex-end;
-  background: var(--feedback);
-  border-color: var(--feedback);
-  color: #000;
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
 }
 .bubble.agent {
   align-self: flex-start;
@@ -1125,7 +1170,7 @@ body.atlas {
 .spinner {
   width: 14px;
   height: 14px;
-  border-radius: 50%;
+  border-radius: var(--radius-pill);
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   animation: spin 0.8s linear infinite;
@@ -1142,9 +1187,6 @@ body.atlas {
 }
 .bubble.user small {
   text-align: right;
-}
-.bubble.user:not(.queued) :is(small, .anchor) {
-  color: #000;
 }
 .bubble-text {
   white-space: pre-wrap;
@@ -1164,10 +1206,6 @@ body.atlas {
 .bubble.queued {
   background: transparent;
   border-style: dashed;
-  color: var(--fg);
-}
-.bubble.user.queued :is(small, .anchor) {
-  color: var(--fg);
 }
 .bubble.queued small {
   display: flex;
@@ -1182,14 +1220,15 @@ body.atlas {
   width: 18px;
   height: 18px;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   padding: 0;
-  background: var(--pending);
-  color: #000;
+  background: var(--border);
+  color: var(--fg-muted);
   cursor: pointer;
 }
 .queued-remove:disabled {
-  opacity: 0.55;
+  color: var(--hollow);
+  background: var(--rule);
   cursor: not-allowed;
 }
 .queued-remove svg {
@@ -1222,10 +1261,10 @@ body.atlas {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* A selected range keeps the chrome's pending state distinct from artifact-owned content. */
+/* A selected range keeps the artifact's own highlight: activity means attention is here. */
 .anchor-excerpt.text {
-  background: var(--surface-2);
-  outline: 1px solid var(--pending);
+  background: rgb(111 199 194 / 0.22);
+  box-shadow: 0 0 0 1px rgb(111 199 194 / 0.35);
   color: var(--fg);
   border-radius: 3px;
   padding: 0 3px;
@@ -1309,7 +1348,7 @@ body.atlas {
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: var(--ink-2);
+  color: var(--cream-200);
 }
 .chat-md code {
   font-family: var(--font-mono);
@@ -1318,7 +1357,7 @@ body.atlas {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0 5px;
-  color: var(--ink-2);
+  color: var(--cream-200);
 }
 .chat-md pre code {
   background: none;
@@ -1357,7 +1396,7 @@ body.atlas {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
-  color: var(--app-activity);
+  color: var(--fg-muted);
   font-size: 11px;
   font-weight: var(--w-medium);
   line-height: 1.4;
@@ -1397,8 +1436,8 @@ body.atlas {
   min-height: 82px;
   resize: vertical;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-interactive);
-  background: var(--bg);
+  border: 1px solid var(--ink-3);
+  background: var(--surface-2);
   color: var(--fg);
   padding: 10px;
   font: inherit;
@@ -1437,7 +1476,7 @@ body.atlas {
   width: 32px;
   height: 32px;
   flex: 0 0 auto;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   object-fit: cover;
 }
 .chat-attachment-copy {
@@ -1462,10 +1501,14 @@ body.atlas {
 .chat-attach {
   border: 0;
   background: transparent;
-  color: var(--accent);
+  color: var(--ink-2);
   cursor: pointer;
   font: inherit;
   padding: 2px 4px;
+}
+.chat-attachment-chip button:hover,
+.chat-attach:hover {
+  color: var(--app-feedback);
 }
 .chat-attachment-toolbar {
   display: flex;
@@ -1494,10 +1537,10 @@ body.atlas {
 }
 .send-hint.persistent {
   padding: var(--space-4);
-  border: 1px solid var(--pending);
+  border: 1px solid var(--app-pending);
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--pending);
+  background: transparent;
+  color: var(--app-pending);
 }
 .send-hint[hidden] {
   display: none;
@@ -1511,7 +1554,7 @@ body.atlas {
 .ended-overlay {
   position: fixed;
   inset: var(--bar-h) 0 0 0;
-  background: rgba(0, 0, 0, 0.86);
+  background: rgb(0 0 0 / 0.86);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1529,8 +1572,8 @@ body.atlas {
   text-align: center;
 }
 .ended-title {
-  font-family: var(--font-serif);
-  font-style: italic;
+  font-family: var(--font-sans);
+  font-weight: var(--w-semi);
   font-size: 22px;
   line-height: 1.3;
   color: var(--fg);
@@ -1593,10 +1636,7 @@ body.layout-gate-active iframe#artifact {
     --bar-h: calc(56px + env(safe-area-inset-top, 0px));
     --dock-h: 60px;
     --sheet-peek: 16px;
-    --composer-action-h: 34px;
-    --composer-reserve: calc(
-      1px + var(--space-4) + var(--composer-action-h) + var(--space-6) + env(safe-area-inset-bottom, 0px)
-    );
+    --composer-reserve: calc(1px + var(--space-4) + 34px + var(--space-6) + env(safe-area-inset-bottom, 0px));
     --sheet-top: max(var(--bar-h) + var(--sheet-peek) - var(--vv-top, 0px), var(--sheet-peek));
   }
   .bar {
@@ -1614,7 +1654,7 @@ body.layout-gate-active iframe#artifact {
   }
   .frame {
     padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
-    background: #fff;
+    background: var(--bg-bar);
   }
   .panel {
     position: fixed;
@@ -1627,10 +1667,11 @@ body.layout-gate-active iframe#artifact {
     padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
     border-left: 0;
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    /* An inset outline separates the sheet without adding a pixel to its measured geometry. */
-    box-shadow: none;
-    outline: 1px solid var(--border-subtle);
-    outline-offset: -1px;
+    /* The hairline is a shadow, not a border: a border would add to the sheet's box and push
+       the docked head one pixel past the viewport edge. */
+    box-shadow:
+      0 -1px 0 var(--border-subtle),
+      var(--shadow-floating);
     /* Collapsed: slide everything but the dock below the viewport. The sheet keeps its full
        height, so opening it is one transform and the chat never reflows mid-gesture. */
     transform: translateY(calc(100% - var(--dock-h) - env(safe-area-inset-bottom, 0px)));
@@ -1663,7 +1704,7 @@ body.layout-gate-active iframe#artifact {
     width: 36px;
     height: 4px;
     margin: 0 auto 6px;
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-sm);
     background: var(--border-strong);
   }
   .panel-head-row {
@@ -1693,7 +1734,7 @@ body.layout-gate-active iframe#artifact {
     display: none;
   }
   .panel-summary.is-accent {
-    color: var(--pending);
+    color: var(--accent);
     font-weight: var(--w-semi);
   }
   .panel-summary.is-unread::before {
@@ -1702,8 +1743,8 @@ body.layout-gate-active iframe#artifact {
     width: 6px;
     height: 6px;
     margin-right: 6px;
-    border-radius: 50%;
-    background: var(--feedback);
+    border-radius: var(--radius-pill);
+    background: var(--accent);
     vertical-align: 1px;
   }
   .panel-toggle {
@@ -1714,11 +1755,15 @@ body.layout-gate-active iframe#artifact {
     width: 32px;
     height: 32px;
     padding: 0;
-    border: 1px solid var(--border-interactive);
-    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     background: var(--bg-elevated);
-    color: var(--app-activity);
+    color: var(--fg-muted);
     cursor: pointer;
+  }
+  /* The bar toggle belongs to the desktop layout; the phone dock owns the conversation. */
+  .conversation-toggle {
+    display: none;
   }
   .panel-toggle svg {
     display: block;
@@ -1727,8 +1772,8 @@ body.layout-gate-active iframe#artifact {
   body.sheet-open .panel-toggle svg {
     transform: rotate(180deg);
   }
-  .panel-head.is-fresh .panel-handle {
-    animation: dock-marker 700ms var(--ease);
+  .panel-head.is-fresh .panel-toggle {
+    animation: dock-pulse 700ms var(--ease);
   }
   .panel-scroll {
     flex: 1 1 56px;
@@ -1762,24 +1807,14 @@ body.layout-gate-active iframe#artifact {
     z-index: 1;
     padding-top: 8px;
     background: var(--bg-panel);
-    box-shadow: none;
-  }
-  .composer .actions::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    left: 0;
-    height: 1px;
-    background: var(--border-subtle);
-    pointer-events: none;
+    box-shadow: 0 -1px 0 var(--border-subtle);
   }
   .panel-scrim {
     display: block;
     position: fixed;
     inset: var(--bar-h) 0 0 0;
     z-index: 29;
-    background: rgba(0, 0, 0, 0.72);
+    background: var(--veil);
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--dur-slow) var(--ease);
@@ -1794,57 +1829,6 @@ body.layout-gate-active iframe#artifact {
   }
   .share-copy-row {
     flex-direction: column;
-  }
-}
-/* The phone sheet must reserve the taller send row before the coarse-pointer hit-area rules
-   below apply, otherwise a short visual viewport could clip the actions. */
-@media (max-width: 860px) and (pointer: coarse) {
-  :root {
-    --composer-action-h: 44px;
-  }
-}
-/* Coarse pointers keep the compact visual language while every interactive chrome control gets
-   a physical 44px target. This applies on tablets and touch laptops too, not just phone widths. */
-@media (pointer: coarse) {
-  button {
-    min-width: 44px;
-    min-height: 44px;
-  }
-  .annotate-switch {
-    min-height: 44px;
-  }
-  .more-button,
-  .panel-toggle {
-    width: 44px;
-    height: 44px;
-  }
-  .chat-attach {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-    padding: 2px 10px;
-  }
-  .actions .button {
-    min-height: 44px;
-  }
-  .warnings-button {
-    min-height: 44px;
-  }
-  .queued-remove,
-  .share-close {
-    width: 44px;
-    height: 44px;
-  }
-  .queued-remove {
-    flex: 0 0 44px;
-  }
-  .chat-attachment-chip button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 44px;
-    min-height: 44px;
-    padding: 2px 4px;
   }
 }
 /* A phone on its side has no height to share: the raised sheet covers the bar as well (the sheet
@@ -1872,21 +1856,13 @@ body.layout-gate-active iframe#artifact {
   .panel-head.is-fresh .panel-toggle {
     animation: none;
   }
-  .panel-head.is-fresh .panel-handle {
-    animation: none;
-  }
 }
-@media (min-width: 861px) and (prefers-reduced-motion: reduce) {
-  .panel {
-    transition: none;
-  }
-}
-@keyframes dock-marker {
+@keyframes dock-pulse {
   0% {
-    background: var(--pending);
+    box-shadow: 0 0 0 0 rgb(111 199 194 / 0.55);
   }
   100% {
-    background: var(--border-strong);
+    box-shadow: 0 0 0 10px rgb(111 199 194 / 0);
   }
 }
 
@@ -1897,7 +1873,7 @@ body.layout-gate-active iframe#artifact {
 .whiteboard-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.92);
+  background: rgb(0 0 0 / 0.92);
   z-index: 80;
   display: flex;
 }
@@ -1930,8 +1906,8 @@ body.layout-gate-active iframe#artifact {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-interactive);
-  border-radius: 50%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   color: var(--fg-faint);
   cursor: pointer;

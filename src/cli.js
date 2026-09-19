@@ -1140,7 +1140,7 @@ export async function shutdownServerOnPort(
     return { server: { status: "not-running", port } };
   }
   if (!(await canControlServerOnPort(port, health, processMatchesAtlas))) {
-    return { server: { status: "not-atlas-core", port } };
+    return { server: { status: "not-atlas", port } };
   }
   await shutdownRequester(baseUrl, { reason: "stop" });
   let freed = await portFreeWaiter(baseUrl, 3000);
@@ -1628,7 +1628,6 @@ async function ensureServer({ forceRestart = false, reloadKey = "" } = {}) {
 // to step aside.
 export function shouldRestartServer(currentVersion, healthBody, forceRestart = false) {
   if (!healthBody || typeof healthBody !== "object") return false;
-  if (healthBody.app !== "atlas-core") return true;
   if (forceRestart && healthBody.app === "atlas-core") return true;
   if (healthBody.network_stale === true && healthBody.app === "atlas-core") return true;
   if (typeof healthBody.version !== "string" || healthBody.version === "") return true;
@@ -1711,64 +1710,18 @@ async function waitForPortFree(baseUrl, timeoutMs) {
 // on the port and doesn't expose /shutdown, so we resolve its PID via lsof and SIGTERM it.
 // macOS/Linux only - Windows users would need to kill manually, but atlas-core isn't
 // shipped for Windows today.
-/**
- * Match only the Node entrypoints Atlas Core itself uses to launch its server.
- * A directory or unrelated script that merely contains "atlas-core" is not enough.
- *
- * @param {string} command
- * @returns {boolean}
- */
-export function processCommandMatchesAtlasServer(command) {
-  const value = String(command || "").replaceAll("\\", "/");
-  const sourceEntry =
-    /(?:^|\s)(?:"[^"]*\/bin\/atlas-core\.js"|'[^']*\/bin\/atlas-core\.js'|\S*\/bin\/atlas-core\.js)(?=\s|$)/;
-  const installedEntry =
-    /(?:^|\s)(?:"[^"]*\/atlas-core\/dist\/cli\.mjs"|'[^']*\/atlas-core\/dist\/cli\.mjs'|\S*\/atlas-core\/dist\/cli\.mjs)(?=\s|$)/;
-  return (sourceEntry.test(value) || installedEntry.test(value)) && /(?:^|\s)server(?=\s|$)/.test(value);
-}
-
-function spawnTextProcess(command, args, options) {
-  const result = spawnSync(command, args, { ...options, encoding: "utf8" });
-  return {
-    status: result.status,
-    stdout: String(result.stdout || ""),
-  };
-}
-
-/**
- * @param {number} port
- * @param {(command: string, args: string[], options: Record<string, unknown>) => { status?: number | null, stdout?: string }} spawnProcess
- * @returns {number[]}
- */
-function atlasProcessIdsOnPort(port, spawnProcess) {
-  const pids = spawnProcess("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" });
-  if (pids.status !== 0) return [];
-  const matches = [];
-  for (const line of String(pids.stdout || "").split("\n")) {
-    const pid = Number(line.trim());
-    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
-    const command = spawnProcess("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8" });
-    if (command.status === 0 && processCommandMatchesAtlasServer(String(command.stdout || ""))) matches.push(pid);
-  }
-  return matches;
-}
-
-/**
- * @param {number} port
- * @param {{
- *   spawn?: (command: string, args: string[], options: Record<string, unknown>) => { status?: number | null, stdout?: string },
- *   signal?: (pid: number, signal: NodeJS.Signals) => unknown
- * }} [options]
- */
-export function killProcessOnPort(port, options = {}) {
-  const spawnProcess = options.spawn || spawnTextProcess;
-  const signal = options.signal || process.kill;
+function killProcessOnPort(port) {
   try {
-    for (const pid of atlasProcessIdsOnPort(port, spawnProcess)) {
-      try {
-        signal(pid, "SIGTERM");
-      } catch {
-        // Process already gone or permission denied - either way nothing we can do.
+    const result = spawnSync("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" });
+    if (result.status !== 0) return;
+    for (const line of result.stdout.split("\n")) {
+      const pid = Number(line.trim());
+      if (Number.isInteger(pid) && pid > 0 && pid !== process.pid) {
+        try {
+          process.kill(pid, "SIGTERM");
+        } catch {
+          // Process already gone or permission denied - either way nothing we can do.
+        }
       }
     }
   } catch {
@@ -1778,10 +1731,20 @@ export function killProcessOnPort(port, options = {}) {
 
 function processOnPortMatchesAtlas(port) {
   try {
-    return atlasProcessIdsOnPort(port, spawnTextProcess).length > 0;
+    const pids = spawnSync("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" });
+    if (pids.status !== 0) return false;
+    for (const line of pids.stdout.split("\n")) {
+      const pid = Number(line.trim());
+      if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
+      const command = spawnSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8" });
+      if (command.status === 0 && /atlas-core/.test(command.stdout)) {
+        return true;
+      }
+    }
   } catch {
     return false;
   }
+  return false;
 }
 
 async function startServer(port) {
@@ -2057,7 +2020,7 @@ export function getCommandHelp(command, { agent = "generic" } = {}) {
 }
 
 function createTopLevelHelp({ agent = "generic" } = {}) {
-  return `atlas-core - Atlas Core AXI\n\nUsage:\n  atlas-core\n  atlas-core <html-file> [--no-open] [--no-gate] [--reopen]\n  atlas-core poll <html-file> [--agent-reply "..."] [--agent-reply-file <path>]\n  atlas-core end <html-file>\n  atlas-core export <html-file> [--out <path>]\n  atlas-core share <html-file> [--private | --password <pw>] [--token <t>]\n  atlas-core share <html-file> --site <site_id> --update-key <key> [--private | --password <pw>]\n  atlas-core share --unpublish --site <site_id> --update-key <key>\n  atlas-core stop\n  atlas-core playbook [playbook_id]\n  atlas-core design\n  atlas-core setup hooks\n  atlas-core setup plugin\n  atlas-core update [--check]\n\n${DESIGN_SYSTEM_HINT}\n\nNote: poll long-polls until the user sends feedback, ends the session, or leaves every review window disconnected past the reconnect grace period, staying silent while it waits - never kill it. Layout issues the browser detects are passive: they collect in the user's Layout issues inbox in the Atlas Core top bar and reach the agent only when the user selects them and queues the fixes, as an ordinary tag "layout-warnings" prompt. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. ${pollExecutionGuidance({ agent })} ${POLL_SEND_AND_END_RULE}\n\n`;
+  return `atlas-core - Atlas Core AXI\n\nUsage:\n  atlas-core\n  atlas-core <html-file> [--no-open] [--no-gate] [--reopen]\n  atlas-core poll <html-file> [--agent-reply "..."] [--agent-reply-file <path>]\n  atlas-core end <html-file>\n  atlas-core export <html-file> [--out <path>]\n  atlas-core share <html-file> [--private | --password <pw>] [--token <t>]\n  atlas-core share <html-file> --site <site_id> --update-key <key> [--private | --password <pw>]\n  atlas-core share --unpublish --site <site_id> --update-key <key>\n  atlas-core stop\n  atlas-core playbook [playbook_id]\n  atlas-core design\n  atlas-core setup hooks\n  atlas-core setup plugin\n\n${DESIGN_SYSTEM_HINT}\n\nNote: poll long-polls until the user sends feedback, ends the session, or leaves every review window disconnected past the reconnect grace period, staying silent while it waits - never kill it. Layout issues the browser detects are passive: they collect in the user's Layout issues inbox in the Atlas Core top bar and reach the agent only when the user selects them and queues the fixes, as an ordinary tag "layout-warnings" prompt. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. ${pollExecutionGuidance({ agent })} ${POLL_SEND_AND_END_RULE}\n\n`;
 }
 
 function createCommandHelp({ agent = "generic" } = {}) {
@@ -2069,7 +2032,7 @@ function createCommandHelp({ agent = "generic" } = {}) {
     share: `Usage:\n  atlas-core share <html-file> [--private | --password <pw>] [--token <t>]\n  atlas-core share <html-file> --site <site_id> --update-key <key> [--private | --password <pw>]\n  atlas-core share --unpublish --site <site_id> --update-key <key>\n\nPublish the artifact on ht-ml.app (https://ht-ml.app), a third-party hosting service not part of Atlas Core, and print a visitable URL. Shares are PUBLIC by default: anyone with the link can open the page, and it may be indexed or scraped. Pass --private to publish a PRIVATE page behind a generated password, returned once in the output - give it to the user with the URL and tell them it is a shared secret. Pass --password <pw> instead when the user chose the password; it is never echoed back. Builds the same local-inlined HTML as 'export' (local assets inlined; remote CDN/font URLs left as links and are not blocked by CSP on ht-ml.app, but still load over the viewer's network), then POSTs it to ht-ml.app's /v1 API. Creating a site needs no account or API key. The response includes the url plus a secret update_key (shown once) for changing the page later.\n\n--site <site_id> with --update-key <key> republishes an existing page in place: same URL, new HTML. On a republish the password is left alone unless you pass --private (rotate to a new generated one) or --password <pw> (set one). There is no way to make a private page public again: ht-ml.app accepts a request to clear a password and silently ignores it, so Atlas Core does not offer one rather than reporting a page as public while it is still gated. Locking a page that was PUBLIC is also not instant at ht-ml.app's CDN: it was observed still answering uncredentialed requests for minutes after the password was set, so do not tell the user a newly gated page is unreachable right away (a page that was already private has no such cached copy).\n\n--unpublish takes the same credentials and no file. ht-ml.app has NO delete endpoint, so this replaces the page with a short placeholder and locks it behind a random password that is immediately discarded; the URL still resolves and the host still holds what was published. Say that to the user rather than calling it deleted. The update_key still works, so republishing with --private brings the page back behind a new password.\n\nA value flag given an empty or whitespace-only value is REFUSED rather than acted on: an unquoted shell variable that is unset makes \`--password $PW\` an empty password, which the host treats as none and would publish a PUBLIC page while you believed it was gated. Quote the value, or pass --private to have Atlas Core generate one.\n\nSet ATLAS_CORE_HTML_APP_TOKEN (or pass --token) to attach an optional bearer token when CREATING a page; it is never required. A republish (--site/--update-key) or --unpublish rejects --token, because the update_key is what the Authorization header carries there. The annotation SDK is never included.\n`,
     stop: `Usage: atlas-core stop [--port <port>]\n\nShut down the background Atlas Core server. The server also stops itself when no browser or poll has been connected for a while (ATLAS_CORE_IDLE_TIMEOUT_MS, default 30m) and immediately when the last session ends with nothing connected.\n`,
     playbook: `Usage: atlas-core playbook [playbook_id]\n\nList focused artifact guidance playbooks, or show one playbook by ID. Known IDs: diagram, table, comparison, plan, code, input, explanation, slides.\n\n${PLAYBOOK_ROUTER_HELP}\n\nExamples:\n  atlas-core playbook\n  atlas-core playbook diagram\n  atlas-core playbook input\n`,
-    design: `Usage: atlas-core design\n\nShow a copy-pasteable CDN snippet for Tailwind CSS browser runtime v4 + DaisyUI v5 + themes, the whiteboard (Mermaid) opt-in snippet, a content-to-playbook router, an optional layout safety CSS snippet, plus technical reference for DaisyUI components. ${PLAYBOOK_ROUTER_HELP} Atlas Core artifacts stay portable HTML. This CDN snippet is the design fallback, not the default: inspect the subject project before falling back, and paste the layout safety CSS only when useful for dense nested grid/flex layouts, badges, wide fonts, or local media. ${DESIGN_PRIORITY_RULE}\n`,
+    design: `Usage: atlas-core design\n\nShow the Atlas Core OLED head snippet (Archivo + IBM Plex Mono fonts and the atlas-core-oled theme, the default for new artifacts), a copy-pasteable CDN snippet for Tailwind CSS browser runtime v4 + DaisyUI v5 + themes, the whiteboard (Mermaid) opt-in snippet, a content-to-playbook router, an optional layout safety CSS snippet, plus technical reference for DaisyUI components. ${PLAYBOOK_ROUTER_HELP} Atlas Core artifacts stay portable HTML. This CDN snippet is the design fallback, not the default: inspect the subject project before falling back, and paste the layout safety CSS only when useful for dense nested grid/flex layouts, badges, wide fonts, or local media. ${DESIGN_PRIORITY_RULE}\n`,
     setup: `Usage: atlas-core setup hooks\n       atlas-core setup plugin\n\nhooks: install or repair agent SessionStart hooks for atlas-core ambient context in Claude Code, Codex, OpenCode, and GitHub Copilot CLI. Restart your agent session afterward to receive the context. This is the primary integration - it carries live session state.\n\nplugin: register the installed atlas-core package as an Agent Plugin (agent-plugins.org) in VS Code, Cursor, and GitHub Copilot CLI. The installed package directory is itself the plugin root, so nothing is downloaded and no marketplace is involved. Reload each client afterward. Codex users should use \`setup hooks\` instead.\n\nBoth actions are explicit opt-in, idempotent, and repair a stale path after a reinstall.\n`,
     update: `Usage: atlas-core update [--check]\n\nAtlas Core itself is installed from a source clone and never updates through an npm registry package; the installer only resolves its normal dependencies there. From the cloned atlas-core repository, run \`git pull --ff-only\` followed by \`npm run install:local\`. The --check and --dry-run forms print the same source-update guidance without changing anything.\n`,
     server: `Usage: atlas-core server [--port 4397] [--verbose]\n\nRun the local Atlas Core server. Pass --verbose (or set ATLAS_CORE_DEBUG=1) to log session and watcher events to stderr. Detached server output is appended to ~/.atlas-core/server.log, or ATLAS_CORE_STATE_DIR/server.log when set, for startup and crash diagnostics.\n\nBy default Atlas Core binds to 127.0.0.1 and, when Tailscale is running, this machine's Tailscale IPv4. Any explicit ATLAS_CORE_HOST overrides automatic Tailscale binding; wildcard values such as 0.0.0.0 or :: are restricted to loopback. An explicit non-wildcard ATLAS_CORE_HOST sets one bind address; binding beyond loopback exposes an unauthenticated server that can read and serve arbitrary local files to anything that can reach it, so only do so on a trusted network. With automatic binding enabled, a successfully bound Tailscale listener uses its MagicDNS name in generated session links; otherwise ATLAS_CORE_LINK_HOST can set the link hostname. See README's Allowed hosts section for Host allowlisting and ATLAS_CORE_ALLOWED_HOSTS. ATLAS_CORE_NO_OPEN=1 (or --no-open) suppresses the local browser launch.\n`,

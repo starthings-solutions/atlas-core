@@ -1,8 +1,8 @@
 node_modules/
 dist/
 coverage/
-.atlas/
-.atlas-core/
+.lavish/
+.lavish-axi/
 # Agent runtime state. `.omc/skills/**` is the one committable exception.
 /.omc/*
 !/.omc/skills/
@@ -11,4 +11,3 @@ coverage/
 package-lock.json
 .no-mistakes/evidence/
 /.planning/
-.worktrees/

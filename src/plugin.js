@@ -23,6 +23,7 @@ const crossSpawn = createRequire(import.meta.url)("cross-spawn");
 // Clients select their local validation rules from this string; they never fetch it.
 export const PLUGIN_SCHEMA_URL = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
 
+// Not in package.json (npm infers no author), so the one authoritative copy lives here.
 const PLUGIN_AUTHOR = Object.freeze({
   name: "Starthings Solutions",
   url: "https://github.com/starthings-solutions",

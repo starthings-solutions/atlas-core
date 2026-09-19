@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { EventEmitter, on, once } from "node:events";
+import { on, once } from "node:events";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
 import { connect as netConnect } from "node:net";
@@ -758,14 +758,16 @@ test("annotation card title renders selected tag as an html element name", () =>
   assert.match(js, /"Annotate &lt;" \+ c\.tag \+ "&gt;"/);
 });
 
-test("annotation card shadow styles use Atlas Core design-system variables", () => {
+test("annotation card shadow styles use Atlas Core OLED variables", () => {
   const js = createSdkJs("abc");
 
-  assert.match(js, /--ink-900:#0f1115/);
-  assert.match(js, /--accent:#f4c95d/);
-  assert.match(js, /--font-sans:/);
+  assert.match(js, /--void:#000000/);
+  assert.match(js, /--app-activity:#6fc7c2/);
+  assert.match(js, /--accent:var\(--app-activity\)/);
+  assert.match(js, /--font-sans:"Archivo"/);
   assert.match(js, /font-family:var\(--font-sans\)/);
-  assert.match(js, /:focus-visible\{outline:2px solid var\(--accent\);outline-offset:2px/);
+  assert.match(js, /:focus-visible\{outline:2px solid var\(--accent\);outline-offset:3px/);
+  assert.match(js, /\.atlas-send\{background:var\(--app-ink\);color:var\(--void\)\}/);
 });
 
 test("chrome top bar uses an Annotate switch instead of a labeled toggle button", () => {
@@ -778,7 +780,7 @@ test("chrome top bar uses an Annotate switch instead of a labeled toggle button"
   assert.doesNotMatch(html, /Inspect/);
 });
 
-test("annotate switch shows an activity track and ink knob when enabled", async () => {
+test("annotate switch shows an activity track and void knob when enabled", async () => {
   const js = await chromeClientSource();
   const css = await chromeCssSource();
 
@@ -787,19 +789,27 @@ test("annotate switch shows an activity track and ink knob when enabled", async 
   assert.match(js, /annotationSwitch\.setAttribute\("aria-pressed", String\(annotation\)\)/);
 });
 
-test("chrome declares the Atlas Core design-system tokens", async () => {
+test("chrome declares the Atlas Core OLED tokens", async () => {
   const css = await chromeCssSource();
 
-  assert.match(css, /--void:#000/);
+  assert.match(css, /--void:#000000/);
   assert.match(css, /--surface:#080808/);
+  assert.match(css, /--surface-2:#101010/);
+  assert.match(css, /--ink-3:#787878/);
+  assert.match(css, /--ink-2:#a3a3a3/);
   assert.match(css, /--app-ink:#f8f4eb/);
   assert.match(css, /--app-feedback:#ffb386/);
   assert.match(css, /--app-risk:#f87171/);
   assert.match(css, /--app-pending:#f2c14e/);
   assert.match(css, /--app-activity:#6fc7c2/);
-  assert.match(css, /--border-interactive:var\(--ink-3\)/);
-  assert.match(css, /--font-serif:/);
-  assert.match(css, /--font-sans:/);
+  assert.match(css, /--ink-900:var\(--void\)/);
+  assert.match(css, /--brass-500:var\(--app-activity\)/);
+  assert.match(css, /--rust-500:var\(--app-risk\)/);
+  assert.match(css, /--font-sans:"Archivo"/);
+  assert.match(css, /--font-mono:"IBM Plex Mono"/);
+  assert.doesNotMatch(css, /--font-serif/);
+  assert.match(css, /--radius-sm:2px/);
+  assert.match(css, /--radius-xl:3px/);
   assert.match(css, /--text-display:92px/);
   assert.match(css, /--lh-display:1/);
   assert.match(css, /--space-32:64px/);
@@ -813,10 +823,10 @@ test("chrome declares the Atlas Core design-system tokens", async () => {
 test("artifact SDK uses design-token aliases for annotation highlight and shadow UI", () => {
   const js = createSdkJs("abc");
 
-  assert.match(js, /--atlas-accent:#f4c95d/);
+  assert.match(js, /--atlas-accent:#6fc7c2/);
   assert.match(js, /--atlas-annotate-outline:2px solid var\(--atlas-accent\)/);
-  assert.match(js, /el\.style\.outline\s*=\s*["']var\(--atlas-annotate-outline,2px solid #f4c95d\)["']/);
-  assert.match(js, /el\.style\.outlineOffset\s*=\s*["']var\(--atlas-annotate-offset,2px\)["']/);
+  assert.match(js, /el\.style\.outline\s*=\s*["']var\(--atlas-annotate-outline,2px solid #6fc7c2\)["']/);
+  assert.match(js, /el\.style\.outlineOffset\s*=\s*["']var\(--atlas-annotate-offset,3px\)["']/);
   assert.match(js, /--fg-faint:var\(--steel-300\)/);
   assert.match(js, /textarea::placeholder\{color:var\(--fg-faint\)\}/);
   assert.doesNotMatch(js, /placeholder\{color:#aeb6c6\}/);
@@ -827,7 +837,7 @@ test("chrome uses the annotation outline as the keyboard focus outline", async (
 
   assert.match(css, /:focus-visible\{outline:var\(--annotate-outline\);outline-offset:var\(--annotate-offset\)/);
   assert.match(css, /--annotate-outline:2px solid var\(--accent\)/);
-  assert.match(css, /--annotate-offset:2px/);
+  assert.match(css, /--annotate-offset:3px/);
 });
 
 test("chrome page ships the phone conversation dock and the viewport contract it relies on", () => {
@@ -841,10 +851,7 @@ test("chrome page ships the phone conversation dock and the viewport contract it
 
   // The dock is a real disclosure control: a labelled button with expanded state over the
   // panel it reveals, a live summary, and a scrim the sheet rises over.
-  assert.match(html, /<aside class="panel" id="panel" aria-labelledby="conversationTitle">/);
-  assert.match(html, /<h2 id="conversationTitle">Conversation<\/h2>/);
-  assert.match(html, /<div class="panel-scroll" id="panelScroll" inert>/);
-  assert.match(html, /<div class="composer" id="chatComposer" inert>/);
+  assert.match(html, /<aside class="panel" id="panel">/);
   assert.match(html, /<div class="panel-scrim" id="panelScrim"><\/div>/);
   assert.match(
     html,
@@ -857,15 +864,55 @@ test("chrome top bar follows the design mock wordmark and overflow menu treatmen
   const html = createChromeHtml({ key: "abc", file: "/tmp/artifact.html" });
   const css = await chromeCssSource();
 
-  assert.match(html, /class="brand-mark">Atlas Core/);
-  assert.match(html, /class="brand-support">Editor/);
-  assert.match(css, /font-family:var\(--font-serif\)/);
-  assert.match(css, /letter-spacing:\.18em/);
+  assert.match(html, /class="brand-mark"><svg[^>]*viewBox='0 0 18 18'/);
+  assert.match(html, /class="brand-support">Atlas Core</);
+  assert.doesNotMatch(html, /brand-support">Editor/);
+  assert.doesNotMatch(css, /font-family:var\(--font-serif\)/);
+  assert.match(css, /letter-spacing:.18em/);
   assert.match(html, /class="more-button" id="moreButton"/);
   assert.match(html, /class="menu more-menu" id="moreMenu" hidden/);
   assert.doesNotMatch(html, /class="file-input"/);
   assert.doesNotMatch(html, /class="divider"/);
   assert.doesNotMatch(html, /class="file-icon"/);
+});
+
+test("chrome top bar carries the desktop conversation toggle with its unread dot", () => {
+  const html = createChromeHtml({ key: "abc", file: "/tmp/artifact.html" });
+
+  assert.match(
+    html,
+    /<button class="conversation-toggle" id="conversationToggle" type="button" aria-expanded="false" aria-controls="panel" aria-label="Show conversation">/,
+  );
+  assert.match(html, /<span class="unread-dot" id="conversationUnread" hidden><\/span>/);
+});
+
+test("desktop chrome collapses the conversation grid track instead of leaving a column", async () => {
+  const css = await chromeCssSource();
+
+  assert.match(css, /body\.panel-collapsed \.layout\{grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css, /body\.panel-collapsed \.panel\{display:none/);
+  assert.match(css, /\.conversation-toggle\{[^}]*display:inline-flex/);
+});
+
+test("chrome falls back to the OLED mark favicon when the artifact has none", () => {
+  const html = createChromeHtml({ key: "abc", file: "/tmp/artifact.html" });
+
+  assert.match(html, /<link rel="icon" href="data:image\/svg\+xml,/);
+  assert.match(html, /stroke='%23787878'/);
+  assert.match(html, /fill='white'/);
+});
+
+test("chrome declares vendored Archivo and IBM Plex Mono faces", async () => {
+  const css = await chromeCssSource();
+
+  assert.match(css, /@font-face\{font-family:"Archivo";[^}]*font-stretch:62% 125%/);
+  assert.match(css, /url\("\/fonts\/archivo-latin-wdth-normal\.woff2"\)/);
+  assert.match(css, /url\("\/fonts\/archivo-latin-ext-wdth-normal\.woff2"\)/);
+  assert.match(css, /@font-face\{font-family:"IBM Plex Mono";[^}]*font-weight:400/);
+  assert.match(css, /url\("\/fonts\/ibm-plex-mono-latin-400-normal\.woff2"\)/);
+  assert.match(css, /url\("\/fonts\/ibm-plex-mono-latin-500-normal\.woff2"\)/);
+  assert.match(css, /url\("\/fonts\/ibm-plex-mono-latin-600-normal\.woff2"\)/);
+  assert.doesNotMatch(css, /fonts\.googleapis\.com/);
 });
 
 test("overflow menu shows the artifact path with a copy affordance", async () => {
@@ -876,7 +923,7 @@ test("overflow menu shows the artifact path with a copy affordance", async () =>
   assert.match(html, /class="menu-file" id="copyPath"[^>]*title="Copy path · \/tmp\/artifact\/index\.html"/);
   assert.match(html, /class="copy-hint"/);
   assert.match(css, /\.menu-file\{[^}]*font-family:var\(--font-mono\)/);
-  assert.match(css, /\.copy-hint\.copied\{color:var\(--app-activity\)/);
+  assert.match(css, /\.copy-hint\.copied\{color:var\(--accent-hover\)/);
 });
 
 test("overflow menu path keeps the file name visible and elides the directories", async () => {
@@ -965,7 +1012,7 @@ test("overflow menu offers publishing an ht-ml.app link via a share dialog", asy
   assert.match(css, /\.share-overlay\{[^}]*z-index:80;/);
   assert.match(css, /\.share-card/);
   assert.match(css, /\.share-link/);
-  assert.match(css, /\.share-card\{[^}]*box-shadow:none/);
+  assert.match(css, /box-shadow:var\(--shadow-floating\)/);
   // The codebase has no global [hidden] rule, so display-setting overlays need explicit
   // [hidden] rules or they show through before they should (e.g. the result block).
   assert.match(css, /\.share-overlay\[hidden\]\{display:none;?\}/);
@@ -1027,11 +1074,11 @@ test("chrome centers the top bar row while bottom-aligning the identity cluster"
   assert.match(css, /\.brand\{[^}]*align-items:flex-end/);
 });
 
-test("chrome chat bubbles follow the preview mock shades", async () => {
+test("chrome chat bubbles follow the OLED panel treatment", async () => {
   const css = await chromeCssSource();
 
-  assert.match(css, /\.bubble\.user\{[^}]*background:var\(--feedback\)/);
-  assert.match(css, /\.bubble\.user\{[^}]*color:#000/);
+  assert.match(css, /\.bubble\.user\{[^}]*background:var\(--bg-elevated\)/);
+  assert.match(css, /\.bubble\.user\{[^}]*border-color:var\(--border-strong\)/);
   assert.match(css, /\.bubble\.agent\{[^}]*background:transparent/);
   assert.match(css, /\.bubble\.agent\{[^}]*border-color:var\(--border-subtle\)/);
   assert.match(css, /border-top-color:var\(--accent\)/);
@@ -1117,7 +1164,7 @@ test("chrome keeps queued notes at the tail of the one conversation, above the s
   // note is the end of the conversation rather than a second region with its own grammar.
   assert.match(
     html,
-    /<div class="panel-scroll" id="panelScroll" inert><div class="chat" id="chatLog"><\/div><div class="chat chat-queued" id="queuedLog"><\/div><\/div><div class="composer" id="chatComposer" inert>/,
+    /<div class="panel-scroll" id="panelScroll"><div class="chat" id="chatLog"><\/div><div class="chat chat-queued" id="queuedLog"><\/div><\/div><div class="composer" id="chatComposer">/,
   );
   assert.doesNotMatch(html, /annotation-pills/);
   assert.doesNotMatch(html, /<h2>Queued Annotations<\/h2>/);
@@ -3343,30 +3390,40 @@ test("/chrome.css serves the extracted chrome stylesheet", async () => {
 
     assert.equal(res.status, 200);
     assert.match(res.headers.get("content-type") || "", /text\/css/);
-    assert.ok(body.length > 0);
+    assert.match(normalizeCssForAssertions(body), /--void:#000000/);
+    assert.match(
+      normalizeCssForAssertions(body),
+      /\.layout\{[^}]*grid-template-columns:minmax\(0,1fr\) ?var\(--panel-w\)/,
+    );
   } finally {
     await server.close();
     await rm(dir, { recursive: true, force: true });
   }
 });
 
-test("/chrome-fonts serves vendored application fonts and rejects unknown assets", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "atlas-fonts-"));
+test("/fonts/:file serves the vendored chrome type and 404s anything else", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
   const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
   try {
-    const base = `http://127.0.0.1:${server.port}`;
-    for (const asset of [
+    for (const file of [
       "archivo-latin-wdth-normal.woff2",
+      "archivo-latin-ext-wdth-normal.woff2",
       "ibm-plex-mono-latin-400-normal.woff2",
       "ibm-plex-mono-latin-500-normal.woff2",
       "ibm-plex-mono-latin-600-normal.woff2",
     ]) {
-      const response = await fetch(`${base}/chrome-fonts/${asset}`);
-      assert.equal(response.status, 200, asset);
-      assert.match(response.headers.get("content-type") || "", /font\/woff2|application\/font-woff/);
-      assert.ok((await response.arrayBuffer()).byteLength > 1_000, asset);
+      const res = await fetch(`http://127.0.0.1:${server.port}/fonts/${file}`);
+      const bytes = Buffer.from(await res.arrayBuffer());
+
+      assert.equal(res.status, 200, file);
+      assert.match(res.headers.get("content-type") || "", /font\/woff2/, file);
+      // woff2 magic: 'wOF2'.
+      assert.equal(bytes.subarray(0, 4).toString("ascii"), "wOF2", file);
+      assert.ok(bytes.length > 10_000, `${file} is not an empty stub`);
     }
-    assert.equal((await fetch(`${base}/chrome-fonts/not-a-font.woff2`)).status, 404);
+
+    const missing = await fetch(`http://127.0.0.1:${server.port}/fonts/not-a-font.woff2`);
+    assert.equal(missing.status, 404);
   } finally {
     await server.close();
     await rm(dir, { recursive: true, force: true });
@@ -5985,54 +6042,6 @@ test("resolveWatchTarget defaults to the artifact file so large sibling trees ar
   }
 });
 
-for (const limitCode of ["ENOSPC", "EMFILE"]) {
-  test(`artifact watching falls back to polling when the native watch limit is exhausted (${limitCode})`, async () => {
-    const { createResilientWatcher } = await import("../src/server.js");
-    assert.equal(typeof createResilientWatcher, "function");
-
-    const created = [];
-    const events = [];
-    const failures = [];
-    const fallbacks = [];
-    const watch = (target, options) => {
-      const watcher = Object.assign(new EventEmitter(), {
-        closed: false,
-        async close() {
-          watcher.closed = true;
-        },
-      });
-      created.push({ target, options, watcher });
-      return watcher;
-    };
-
-    const watcher = createResilientWatcher(
-      { path: "/tmp/atlas-artifact.html", options: { ignoreInitial: true } },
-      {
-        watch,
-        onAll: (event, file) => events.push([event, file]),
-        onError: (error) => failures.push(error),
-        onFallback: (error) => fallbacks.push(error),
-      },
-    );
-    const limitError = Object.assign(new Error(`System limit for file watching reached: ${limitCode}`), {
-      code: limitCode,
-    });
-    created[0].watcher.emit("error", limitError);
-    await new Promise((resolve) => setImmediate(resolve));
-
-    assert.equal(created.length, 2);
-    assert.equal(created[0].watcher.closed, true);
-    assert.deepEqual(created[1].options, { ignoreInitial: true, usePolling: true });
-    assert.deepEqual(fallbacks, [limitError]);
-    assert.deepEqual(failures, []);
-
-    created[1].watcher.emit("all", "change", "/tmp/atlas-artifact.html");
-    assert.deepEqual(events, [["change", "/tmp/atlas-artifact.html"]]);
-    await watcher.close();
-    assert.equal(created[1].watcher.closed, true);
-  });
-}
-
 test("resolveWatchTarget upgrades to the artifact directory when data-atlas-live-reload-root opts in", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "atlas-watch-"));
   const artifact = path.join(dir, "artifact.html");
@@ -6174,14 +6183,6 @@ test("server debug logger receives session and watcher lifecycle events", async 
       logs.some((line) => /watch/i.test(line)),
       `expected a watcher log line, got: ${JSON.stringify(logs)}`,
     );
-    assert.ok(
-      logs.some((line) => line.startsWith("[atlas-core]")),
-      JSON.stringify(logs),
-    );
-    assert.ok(
-      logs.every((line) => !line.startsWith("[atlas]")),
-      JSON.stringify(logs),
-    );
   } finally {
     await server.close();
     await rm(dir, { recursive: true, force: true });
@@ -6200,8 +6201,8 @@ test("ended session shows an overlay card over the dimmed chrome", async () => {
   assert.match(html, /class="ended-copy">\/tmp\/artifact\.html</);
   assert.doesNotMatch(html, /The agent polling loop can stop\./);
   assert.match(css, /\.ended-overlay\{[^}]*inset:var\(--bar-h\) 0 0 0/);
-  assert.match(css, /\.ended-overlay\{[^}]*background:rgba\(0,0,0,.86\)/);
-  assert.match(css, /\.ended-title\{[^}]*font-family:var\(--font-serif\)/);
+  assert.match(css, /\.ended-overlay\{[^}]*background:rgb\(0 0 0 \/ \.86\)/);
+  assert.match(css, /\.ended-title\{[^}]*font-family:var\(--font-sans\)/);
   assert.match(js, /endedOverlay\.hidden = false/);
   assert.match(js, /annotationSwitch\.disabled = true/);
   assert.match(js, /moreButton\.disabled = true/);

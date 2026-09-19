@@ -95,22 +95,18 @@ test(
     // The audit's detection calibration is unchanged; what changed is where findings land. A
     // severe result now fills the passive inbox and reveals the artifact, and it must never make
     // the poll return - only the user queueing a fix does that.
-    let browserHasPage = false;
     async function audit(name, viewport, settleMs, expectedCount) {
       const { file, url } = await openFixture(name);
-      if (browserHasPage) run("chrome-devtools-axi", ["open", "about:blank"], chromeEnv);
-      else run("chrome-devtools-axi", ["newpage", `http://127.0.0.1:${port}/health`], chromeEnv);
-      browserHasPage = true;
       run("chrome-devtools-axi", ["emulate", "--viewport", viewport], chromeEnv);
       run("chrome-devtools-axi", ["open", url], chromeEnv);
-      await new Promise((resolve) => setTimeout(resolve, settleMs));
+      run("chrome-devtools-axi", ["wait", String(settleMs)], chromeEnv, settleMs + 45_000);
       let inbox = readInbox();
       // A busy browser can return from navigation before the refreshed chrome has painted its
       // first diagnostic result. Re-open once when the gate is still checking (or a warning-count
       // assertion is otherwise not ready), then keep the final gate assertion strict.
       if (inbox.gate || (expectedCount > 0 && Number(inbox.badge) !== expectedCount)) {
         run("chrome-devtools-axi", ["open", url], chromeEnv);
-        await new Promise((resolve) => setTimeout(resolve, settleMs));
+        run("chrome-devtools-axi", ["wait", String(settleMs)], chromeEnv, settleMs + 45_000);
         inbox = readInbox();
       }
       const poll = run(process.execPath, ["bin/atlas-core.js", "poll", file, "--timeout-ms", "600"], atlasEnv);
@@ -124,7 +120,6 @@ test(
     }
 
     try {
-      run("chrome-devtools-axi", ["start"], chromeEnv);
       await audit("control-broken-occlusion", "1440x1000x1", 3200, 1);
 
       const acceptable = [
@@ -160,10 +155,9 @@ test(
       const revalidationFile = path.join(temp, "root-lock-revalidation.html");
       await copyFile(path.join(fixtures, "control-broken-reachability.html"), revalidationFile);
       const revalidation = openArtifact(revalidationFile);
-      run("chrome-devtools-axi", ["open", "about:blank"], chromeEnv);
       run("chrome-devtools-axi", ["emulate", "--viewport", "390x844x1,mobile,touch"], chromeEnv);
       run("chrome-devtools-axi", ["open", revalidation.url], chromeEnv);
-      await new Promise((resolve) => setTimeout(resolve, 3200));
+      run("chrome-devtools-axi", ["wait", "3200"], chromeEnv);
       const detected = readInbox();
       assert.equal(Number(detected.badge), 3);
       assert.equal(detected.gate, false);
@@ -176,12 +170,8 @@ test(
         revalidationFile,
         '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Repaired controls</title></head><body><button>Continue</button></body></html>',
       );
-      const repairDeadline = Date.now() + 15_000;
-      let repaired;
-      do {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        repaired = readInbox();
-      } while (Number(repaired.badge) !== 0 && Date.now() < repairDeadline);
+      run("chrome-devtools-axi", ["wait", "4500"], chromeEnv);
+      const repaired = readInbox();
       assert.equal(Number(repaired.badge), 0);
       assert.equal(repaired.wrapHidden, true);
       assert.equal(repaired.gate, false);

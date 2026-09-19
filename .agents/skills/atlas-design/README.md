@@ -10,9 +10,9 @@ The product feels like a quiet reading room with a brass lamp: dark ink walls, a
 
 ## Sources
 
-This system is maintained from the Atlas Core source of truth:
+This system was reverse-engineered from the public source of truth:
 
-- **Codebase:** [`starthings-solutions/atlas-core`](https://github.com/starthings-solutions/atlas-core) — the CLI + local HTTP server that ships the Atlas Core UI. The chrome HTML originates in `src/server.js` (`createChromeHtml`), chrome styling and browser behavior originate in `src/chrome.css` and `src/chrome-client.js`, and the in-iframe annotation SDK and its styling originate in `src/artifact-sdk.js` (`createArtifactSdk`). The README, AGENTS.md and CONTRIBUTING.md provide the product narrative.
+- **Codebase:** [`kunchenguid/atlas-core`](https://github.com/kunchenguid/atlas-core) — the CLI + local HTTP server that ships the Atlas Core Editor UI. The chrome HTML originates in `src/server.js` (`createChromeHtml`), chrome styling and browser behavior originate in `src/chrome.css` and `src/chrome-client.js`, and the in-iframe annotation SDK and its styling originate in `src/artifact-sdk.js` (`createArtifactSdk`). The README, AGENTS.md and CONTRIBUTING.md provided the product narrative.
 - **Brand promise** is paraphrased from the repository README: _"HTML is the new markdown. Atlas Core is the new editor for your HTML artifacts."_
 
 No Figma file or slide deck was provided. Slide templates were therefore **not** generated; if you have a deck, point this skill at it and I'll add a `slides/` folder.
@@ -43,7 +43,7 @@ The brand surface this design system serves is **the Editor chrome.** Marketing,
 ├── assets/                    ← logos, marks, glyphs, background imagery
 ├── preview/                   ← Design System tab cards (color, type, components…)
 ├── ui_kits/
-│   └── editor/                ← high-fidelity recreation of the Atlas Core chrome
+│   └── editor/                ← high-fidelity recreation of the Atlas Core Editor chrome
 │       ├── index.html         ← clickable prototype: artifact iframe + chat + annotation card
 │       ├── *.jsx              ← React components (TopBar, ChatPanel, ArtifactFrame, …)
 │       └── README.md          ← how the kit is composed
@@ -122,7 +122,7 @@ Three families do all the work:
 - **Body & UI → Geist Sans** (sans). The repository's chrome uses `ui-sans-serif, system-ui, sans-serif`; Geist is the closest modern foundry sans with the same low-fuss tone. 14px / 1.4 line-height in product chrome, scaled up for marketing.
 - **Code & technical → Geist Mono** (mono). Replaces `ui-monospace, SFMono-Regular, Menlo`. Used for selectors, file paths, CLI snippets, anywhere the user is reading literal characters.
 
-The brand mark **Atlas Core** is set in Geist Sans at `font-weight: 750` with `letter-spacing: .02em`. Bold but not heavy. The serif is for prose — never UI labels.
+The brand mark **Atlas Core Editor** is set in Geist Sans at `font-weight: 750` with `letter-spacing: .02em`. Bold but not heavy. The serif is for prose — never UI labels.
 
 ### Spacing & rhythm
 
@@ -205,7 +205,7 @@ When iconography is genuinely needed (marketing, an empty state, a settings menu
 3. **Currentcolor only.** Icons inherit the parent's color so they tint cream on ink, brass on the CTA, sage on agent bubbles.
 4. **Lucide as the substitute set.** The codebase does **not** ship its own icon font or SVG sprite, so this system uses [Lucide](https://lucide.dev) at the CDN as the closest aesthetic match (thin, geometric, monoline). **Flagged substitution — see Caveats.**
 5. **No emoji. No Unicode dingbat icons** in the chrome. The em dash and middle dot are fine in prose; ✅ ✨ 🔥 are not on brand and will never be.
-6. **The brand mark** is wordmark only — _Atlas Core_ set in Geist Sans 750 with `.02em` tracking. There is no symbol. (`assets/atlas-wordmark.svg`.)
+6. **The brand mark** is wordmark only — _Atlas Core Editor_ set in Geist Sans 750 with `.02em` tracking. There is no symbol. (`assets/atlas-wordmark.svg`.)
 
 To use Lucide via CDN:
 

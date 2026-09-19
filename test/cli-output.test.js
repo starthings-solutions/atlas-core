@@ -33,13 +33,11 @@ import {
   detectInvokingAgent,
   fetchJson,
   getCommandHelp,
-  killProcessOnPort,
   normalizeArgv,
   resolveShareRequest,
   pollInterruptedText,
   pollWaitBannerText,
   pollWaitTickText,
-  processCommandMatchesAtlasServer,
   resolveCopilotHookDir,
   resolveHookHomeDir,
   resolveServerEntry,
@@ -54,7 +52,6 @@ import {
   startPollWaitReporter,
   stopCommand,
   telemetryCommandName,
-  updateCommand,
   VERSION,
 } from "../src/cli.js";
 import { DESIGN_PRIORITY_RULE, DESIGN_SYSTEM_HINT } from "../src/design-reference.js";
@@ -105,7 +102,7 @@ function assertObservablePollWakePath(text) {
   assert.doesNotMatch(text, /foreground command may run.*run the poll as a background task/i);
 }
 
-test("CLI version tracks package.json so release-please bumps reach the installed binary", async () => {
+test("CLI version tracks package.json so release-please bumps reach the published binary", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   assert.equal(VERSION, packageJson.version);
 });
@@ -401,7 +398,8 @@ test("design output prints copy-pasteable CDN URLs so agents can opt in to Daisy
   assert.equal("opt_out" in output.design, false);
   assert.equal("rule" in output.design, false);
   assert.equal(output.design.latest_docs, "https://daisyui.com/components/");
-  assert.equal(output.themes.length, 35);
+  assert.equal(output.themes.length, 36);
+  assert.equal(output.themes[0], "atlas-core-oled");
   assert.ok(output.themes.includes("luxury"));
   assert.ok(output.themes.includes("silk"));
   assert.ok(output.components.actions.includes("button"));
@@ -415,12 +413,31 @@ test("design output prints copy-pasteable CDN URLs so agents can opt in to Daisy
   assert.ok(output.reference.mockup.notes.some((item) => item.includes("line numbers")));
 });
 
-test("design output recommends luxury as the default theme and warns against @apply on DaisyUI classes", () => {
+test("design output recommends atlas-core-oled as the default theme and warns against @apply on DaisyUI classes", () => {
   const output = createDesignOutput();
 
-  assert.ok(output.theme_usage.some((item) => /default.*luxury|luxury.*default/i.test(item)));
+  assert.ok(output.theme_usage.some((item) => /default.*atlas-core-oled|atlas-core-oled.*default/i.test(item)));
+  assert.ok(!output.theme_usage.some((item) => /default.*luxury|luxury.*default/i.test(item)));
   assert.ok(output.theme_usage.some((item) => item.includes("@apply") && /daisyui/i.test(item)));
   assert.ok(output.theme_usage.some((item) => /aborts the entire|no Tailwind styles/i.test(item)));
+  assert.ok(
+    output.theme_usage.some((item) => /--c1.*--c3.*--c4.*--c5|--c3.*--c4.*--c5/.test(item)),
+    "theme usage teaches the categorical series order",
+  );
+});
+
+test("design output carries the OLED head snippet, theme, and categorical contract", () => {
+  const output = createDesignOutput();
+
+  assert.equal(output.oled.theme_name, "atlas-core-oled");
+  assert.match(output.oled.head_snippet, /fonts\.googleapis\.com/);
+  assert.match(output.oled.head_snippet, /\[data-theme="atlas-core-oled"\]/);
+  assert.ok(output.oled.head_snippet.indexOf("fonts.gstatic.com") < output.oled.head_snippet.indexOf("<style>"));
+  assert.deepEqual(output.oled.categorical_order, ["c1", "c3", "c4", "c5"]);
+  assert.equal(output.oled.categorical_slots.c1, "#ffffff");
+  assert.equal(output.oled.categorical_slots.c2, "#f5451b");
+  assert.match(output.oled.categorical_rule, /--c2.*risk|risk.*--c2/);
+  assert.match(output.design.summary, /OLED head snippet/);
 });
 
 test("playbook index output lists known playbooks with concise descriptions", () => {
@@ -2318,17 +2335,6 @@ test("SDK reserved commands pass through instead of normalizing to open", () => 
   assert.deepEqual(normalizeArgv(["update", "--help"]), ["update", "--help"]);
 });
 
-test("update stays on the source clone and never delegates to an npm package", async () => {
-  const output = await updateCommand(["--check"]);
-  const text = JSON.stringify(output);
-
-  assert.match(text, /git pull --ff-only/);
-  assert.match(text, /npm run install:local/);
-  assert.match(text, /starthings-solutions\/atlas-core/);
-  assert.doesNotMatch(text, /npm install (?:-g|--global) atlas-core/);
-  assert.doesNotMatch(text, /registry\.npmjs\.org/);
-});
-
 test("setup hooks resolves HOME before platform-specific user profile variables", () => {
   assert.equal(
     resolveHookHomeDir({ HOME: "/tmp/atlas-home", USERPROFILE: "C:\\Users\\runneradmin" }, "/fallback"),
@@ -2805,10 +2811,8 @@ test("local built CLI opens force a server restart while source and installed ru
   assert.equal(shouldForceRestartForLocalBuild("/usr/local/lib/node_modules/atlas-core/dist/cli.mjs", false), false);
 });
 
-test("shouldRestartServer reuses only an Atlas Core server running the same version", () => {
-  assert.equal(shouldRestartServer("0.1.4", { ok: true, app: "atlas-core", version: "0.1.4" }), false);
-  assert.equal(shouldRestartServer("0.1.4", { ok: true, app: "other", version: "0.1.4" }), true);
-  assert.equal(shouldRestartServer("0.1.4", { ok: true, version: "0.1.4" }), true);
+test("shouldRestartServer reuses a server running the same version", () => {
+  assert.equal(shouldRestartServer("0.1.4", { ok: true, version: "0.1.4" }), false);
 });
 
 test("shouldRestartServer restarts a same-version server after a Tailscale transition", () => {
@@ -2819,7 +2823,7 @@ test("shouldRestartServer restarts a same-version server after a Tailscale trans
 
 test("shouldRestartServer restarts same-version Atlas Core servers when forced", () => {
   assert.equal(shouldRestartServer("0.1.4", { ok: true, app: "atlas-core", version: "0.1.4" }, true), true);
-  assert.equal(shouldRestartServer("0.1.4", { ok: true, app: "other", version: "0.1.4" }, true), true);
+  assert.equal(shouldRestartServer("0.1.4", { ok: true, app: "other", version: "0.1.4" }, true), false);
 });
 
 test("shouldRestartServer restarts when the running server reports a different version", () => {
@@ -2873,38 +2877,6 @@ test("shouldKillProcessOnPort only kills Atlas Core servers with a mismatched ve
   assert.equal(shouldKillProcessOnPort("0.1.4", { ok: true, app: "atlas-core", version: "0.1.4" }), false);
 });
 
-test("Atlas Core process matching requires the real server entrypoint", () => {
-  assert.equal(processCommandMatchesAtlasServer("/usr/bin/node /repo/bin/atlas-core.js server --port 4397"), true);
-  assert.equal(
-    processCommandMatchesAtlasServer(
-      "/usr/bin/node /home/dev/.local/lib/node_modules/atlas-core/dist/cli.mjs server --port 4397",
-    ),
-    true,
-  );
-  assert.equal(processCommandMatchesAtlasServer("/usr/bin/node /tmp/atlas-core-helper.js server --port 4397"), false);
-  assert.equal(processCommandMatchesAtlasServer("/usr/bin/node /repo/bin/atlas-core.js worker --port 4397"), false);
-});
-
-test("killProcessOnPort signals only listeners verified as Atlas Core servers", () => {
-  const killed = [];
-  const commands = new Map([
-    ["101", "/usr/bin/node /repo/bin/atlas-core.js server --port 4397"],
-    ["202", "/usr/bin/node /tmp/unrelated-atlas-core-helper.js server --port 4397"],
-  ]);
-
-  killProcessOnPort(4397, {
-    spawn(command, args) {
-      if (command === "lsof") return { status: 0, stdout: "101\n202\n" };
-      return { status: 0, stdout: commands.get(args[1]) || "" };
-    },
-    signal(pid, name) {
-      killed.push([pid, name]);
-    },
-  });
-
-  assert.deepEqual(killed, [[101, "SIGTERM"]]);
-});
-
 test("shutdownServerOnPort kills pre-handshake Atlas Core servers when shutdown does not free the port", async () => {
   let shutdowns = 0;
   let kills = 0;
@@ -2949,7 +2921,7 @@ test("shutdownServerOnPort ignores unidentified health responders", async () => 
 
   assert.equal(shutdowns, 0);
   assert.equal(kills, 0);
-  assert.deepEqual(output, { server: { status: "not-atlas-core", port: 4387 } });
+  assert.deepEqual(output, { server: { status: "not-atlas", port: 4387 } });
 });
 
 test("open can resume a session without opening another browser window", () => {

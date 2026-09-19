@@ -16,7 +16,7 @@ If the user invokes this skill without any other guidance, ask them what they wa
 - `colors_and_type.css` — drop-in CSS custom properties for the full token system (ink, brass, sage, amber, rust, steel, cream + type + spacing + radii + shadows)
 - `assets/` — wordmark, atlas-mark icon, flow diagram SVG
 - `preview/` — Design-System-tab specimen cards (one concept per card)
-- `ui_kits/editor/` — clickable React recreation of the Atlas Core chrome
+- `ui_kits/editor/` — clickable React recreation of the Atlas Core Editor chrome
 
 ## Quick rules of thumb
 

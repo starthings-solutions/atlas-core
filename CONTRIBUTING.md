@@ -37,7 +37,6 @@ See the [no-mistakes quick start](https://kunchenguid.github.io/no-mistakes/star
 ## Repo Conventions
 
 - Node 22+, ESM-only JavaScript, and TypeScript `checkJs` validation.
-- Install Atlas Core from a clone with `npm run install:local`. To update an existing clone, run `git pull --ff-only` and then `npm run install:local` again.
 - Run `pnpm run check` before pushing.
 - Do not reformat repo-provided `.agents/` skill content; `.prettierignore` excludes it intentionally.
 - Do not hand-edit `CHANGELOG.md` or `.release-please-manifest.json`.
@@ -45,4 +44,4 @@ See the [no-mistakes quick start](https://kunchenguid.github.io/no-mistakes/star
 
 ## Questions
 
-Open an issue in the [Atlas Core repository](https://github.com/starthings-solutions/atlas-core/issues).
+Open an issue, or talk to me on [Discord](https://discord.gg/Wsy2NpnZDu).

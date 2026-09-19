@@ -93,6 +93,19 @@ test("whiteboard confirms sanitized links inside the frame", async () => {
   assert.match(css, /data-atlas-whiteboard-theme="dark"/);
 });
 
+test("whiteboard frame chrome follows the OLED contract in dark mode", async () => {
+  const css = await readFile(new URL("../src/whiteboard-frame.css", import.meta.url), "utf8");
+
+  assert.match(css, /--void:\s*#000000/);
+  assert.match(css, /--app-ink:\s*#f8f4eb/);
+  assert.match(css, /body\[data-atlas-whiteboard-theme="dark"\]\s*\{\s*background:\s*var\(--void\)/);
+  assert.match(css, /#wbHeader button\s*\{[^}]*background:\s*var\(--app-ink\)/);
+  assert.match(css, /"Archivo"/);
+  assert.match(css, /"IBM Plex Mono"/);
+  assert.doesNotMatch(css, /#f4c95d/);
+  assert.doesNotMatch(css, /box-shadow:\s*0 16px/);
+});
+
 test("whiteboard channel tokens are signed, session bound, and short lived", () => {
   const secret = Buffer.from("whiteboard-test-secret");
   const now = 1_700_000_000_000;

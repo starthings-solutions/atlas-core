@@ -1,6 +1,6 @@
 /* global React */
 // Mock chrome renderers for the "reduce button noise" exploration.
-// Each renders a small, static Atlas Core chrome at artboard scale.
+// Each renders a small, static Atlas Core Editor chrome at artboard scale.
 // Shared bits live here; the four variants compose them differently.
 
 const mc = {

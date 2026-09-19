@@ -1,5 +1,5 @@
 name: Bug report
-description: Something went wrong with Atlas Core
+description: Something went wrong with Atlas Core Editor
 labels: ["bug"]
 body:
   - type: textarea
@@ -28,7 +28,7 @@ body:
     id: version
     attributes:
       label: atlas-core version
-      description: Output of `atlas-core --version` from the local source installation.
+      description: Output of `atlas-core --version` or the npm package version.
       placeholder: "0.1.0"
     validations:
       required: true

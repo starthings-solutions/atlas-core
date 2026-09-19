@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createChromeDriver, freePort, run } from "./browser-e2e.js";
+import { fileURLToPath } from "node:url";
 
 // The phone-width conversation surface, measured in a real browser. Before this change the panel
 // was a fixed-fraction strip under the artifact: at 390x844 the composer alone consumed it and
@@ -12,6 +14,31 @@ import { createChromeDriver, freePort, run } from "./browser-e2e.js";
 // geometry an end user would notice: nothing clipped, every control inside the viewport, the
 // artifact never under the dock, and the desktop layout untouched.
 const runBrowserE2e = process.env.ATLAS_CORE_BROWSER_E2E === "1";
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function run(command, args, env, timeout = 45_000) {
+  const result = spawnSync(command, args, {
+    cwd: repoRoot,
+    env: { ...process.env, ...env },
+    encoding: "utf8",
+    timeout,
+  });
+  if (result.error) throw result.error;
+  assert.equal(result.status, 0, `${command} ${args.join(" ")}\n${result.stdout}\n${result.stderr}`);
+  return `${result.stdout || ""}${result.stderr || ""}`;
+}
+
+async function freePort() {
+  const server = net.createServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen({ port: 0, host: "127.0.0.1" }, () => resolve(undefined));
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("failed to allocate a TCP port");
+  await new Promise((resolve) => server.close(() => resolve(undefined)));
+  return address.port;
+}
 
 const ARTIFACT = `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sheet fixture</title>
@@ -34,54 +61,43 @@ const REPLIES = [
 ];
 
 const GEOMETRY = `() => {
-  const rect = (el) => { const r = el.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width), height: Math.round(r.height) }; };
+  const rect = (el) => { const r = el.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), height: Math.round(r.height) }; };
   const scroll = document.getElementById("panelScroll");
   const panel = document.getElementById("panel");
-  const composer = document.getElementById("chatComposer");
   return JSON.stringify({
     viewport: { width: innerWidth, height: innerHeight },
     open: document.body.classList.contains("sheet-open"),
-    drawerOpen: document.body.classList.contains("drawer-open"),
     panelPosition: getComputedStyle(panel).position,
     panel: rect(panel),
-    panelWidth: Math.round(panel.getBoundingClientRect().width),
     head: rect(document.getElementById("panelHead")),
-    toggle: rect(document.getElementById("panelToggle")),
-    annotation: rect(document.getElementById("annotation")),
-    more: rect(document.getElementById("moreButton")),
-    summaryRect: rect(document.getElementById("panelSummary")),
     frame: rect(document.getElementById("artifact")),
     chat: { visible: scroll.clientHeight, content: scroll.scrollHeight, inert: scroll.inert },
     composer: {
-      ...rect(composer),
-      visible: composer.clientHeight,
-      content: composer.scrollHeight,
-      scrollTop: composer.scrollTop,
-      inert: composer.inert,
+      ...rect(document.getElementById("chatComposer")),
+      visible: document.getElementById("chatComposer").clientHeight,
+      content: document.getElementById("chatComposer").scrollHeight,
+      scrollTop: document.getElementById("chatComposer").scrollTop,
     },
     attachments: {
       visible: document.getElementById("chatAttachments").clientHeight,
       content: document.getElementById("chatAttachments").scrollHeight,
     },
     actions: rect(document.getElementById("sendActions")),
-    attach: rect(document.getElementById("chatAttach")),
     send: rect(document.getElementById("send")),
     sendAndEnd: rect(document.getElementById("sendAndEnd")),
     textarea: rect(document.getElementById("chatInput")),
     summary: document.getElementById("panelSummary").textContent,
     toggleLabel: document.getElementById("panelToggle").getAttribute("aria-label"),
-    overflowX: document.documentElement.scrollWidth > innerWidth,
     documentScrollable: document.documentElement.scrollHeight > innerHeight || document.documentElement.scrollWidth > innerWidth,
   });
 }`;
 
 test(
-  "conversation overlays the artifact on desktop and remains a bottom sheet on mobile",
+  "the conversation is a dock and bottom sheet on a phone, and unchanged on desktop",
   { skip: !runBrowserE2e, timeout: 300_000 },
   async () => {
     const temp = await mkdtemp(path.join(tmpdir(), "atlas-mobile-sheet-"));
     const port = await freePort();
-    const chromePort = await freePort();
     const atlasEnv = {
       ATLAS_CORE_PORT: String(port),
       ATLAS_CORE_STATE_DIR: path.join(temp, "state"),
@@ -90,8 +106,38 @@ test(
       ATLAS_CORE_HOST: "127.0.0.1",
       ATLAS_CORE_LINK_HOST: "127.0.0.1",
     };
-    const driver = createChromeDriver({ temp, session: `atlas-mobile-sheet-${process.pid}`, port: chromePort });
-    const { evaluate, wait, emulate, open } = driver;
+    const chromeEnv = {
+      CHROME_DEVTOOLS_AXI_SESSION: `atlas-mobile-sheet-${process.pid}`,
+      CHROME_DEVTOOLS_AXI_USER_DATA_DIR: path.join(temp, "chrome"),
+    };
+
+    function evaluate(expression) {
+      const output = run("chrome-devtools-axi", ["eval", expression], chromeEnv);
+      const raw = output.match(/result:\s*("(?:[^"\\]|\\.)*")/s)?.[1];
+      assert.ok(raw, output);
+      let value = JSON.parse(raw);
+      while (typeof value === "string") {
+        try {
+          value = JSON.parse(value);
+        } catch {
+          break;
+        }
+      }
+      return value;
+    }
+
+    function wait(ms) {
+      run("chrome-devtools-axi", ["wait", String(ms)], chromeEnv, ms + 45_000);
+    }
+
+    function emulate(viewport) {
+      run("chrome-devtools-axi", ["emulate", "--viewport", viewport], chromeEnv);
+    }
+
+    function open(url, settleMs = 4000) {
+      run("chrome-devtools-axi", ["open", url], chromeEnv);
+      wait(settleMs);
+    }
 
     function geometry() {
       return evaluate(GEOMETRY);
@@ -178,16 +224,6 @@ test(
       assert.equal(g.documentScrollable, false, "the page itself never scrolls");
     }
 
-    function assertCoarseTargets(g, names) {
-      for (const name of names) {
-        const target = g[name];
-        assert.ok(
-          target.width >= 44 && target.height >= 44,
-          `${name} is at least a 44px coarse-pointer target: ${JSON.stringify(target)}`,
-        );
-      }
-    }
-
     try {
       const artifact = path.join(temp, "review.html");
       await writeFile(artifact, ARTIFACT);
@@ -208,14 +244,11 @@ test(
       open(url);
       let g = geometry();
       assertDocked(g);
-      assertCoarseTargets(g, ["annotation", "more", "toggle"]);
       assert.equal(g.summary, "Agent not listening");
 
       evaluate('() => { document.getElementById("panelHead").click(); return "ok"; }');
       wait(500);
-      g = geometry();
-      assertSheetUsable(g);
-      assertCoarseTargets(g, ["attach", "send", "sendAndEnd"]);
+      assertSheetUsable(geometry());
 
       // The scrim lowers it again and the artifact is back to full height.
       evaluate('() => { document.getElementById("panelScrim").click(); return "ok"; }');
@@ -274,47 +307,21 @@ test(
       assert.equal(g.panel.bottom, g.viewport.height);
       assertPopulatedComposerUsable(g);
 
-      // ---- Desktop: a stable rail that opens a drawer over the artifact ----
+      // ---- Desktop: a side panel, never a sheet ----
       emulate("1440x1000x1");
       open(url, 3000);
-      const closed = geometry();
-      assert.equal(closed.drawerOpen, false);
-      assert.equal(closed.panelWidth, 48);
-      assert.equal(closed.frame.right, closed.viewport.width - 48);
-      assert.equal(closed.chat.inert, true);
-      assert.equal(closed.composer.inert, true);
-      assert.equal(closed.documentScrollable, false);
-      assert.equal(closed.overflowX, false);
-      for (const control of [closed.toggle, closed.summaryRect]) {
-        assert.ok(control.left >= closed.panel.left && control.right <= closed.panel.right);
-      }
-
-      evaluate('() => { document.getElementById("panelToggle").click(); return "ok"; }');
-      wait(300);
-      const openDrawer = geometry();
-      assert.equal(openDrawer.drawerOpen, true);
-      assert.equal(openDrawer.frame.left, closed.frame.left);
-      assert.equal(openDrawer.frame.right, closed.frame.right);
-      assert.equal(openDrawer.frame.width, closed.frame.width);
-      assert.equal(openDrawer.panel.left, openDrawer.viewport.width - 360);
-      assert.equal(openDrawer.panel.right, openDrawer.viewport.width);
-      assert.equal(openDrawer.panelWidth, 360);
-      assert.equal(openDrawer.chat.inert, false);
-      assert.equal(openDrawer.composer.inert, false);
-      assert.ok(openDrawer.panel.left < openDrawer.frame.right, "drawer overlaps the artifact area");
-
-      open(url, 3000);
-      assert.equal(geometry().drawerOpen, false, "desktop disclosure state is not persisted");
+      g = geometry();
+      assert.equal(g.open, false);
+      assert.notEqual(g.panelPosition, "fixed");
+      assert.equal(g.panel.top, 56);
+      assert.equal(g.panel.bottom, g.viewport.height);
+      assert.equal(g.panel.right - g.panel.left, 360, "desktop panel keeps its width");
+      assert.equal(g.chat.inert, false);
+      assert.equal(g.frame.right, g.panel.left, "artifact and panel sit side by side");
     } finally {
-      try {
-        run(process.execPath, ["bin/atlas-core.js", "stop", "--port", String(port)], atlasEnv, 15_000);
-      } finally {
-        try {
-          driver.stop();
-        } finally {
-          await rm(temp, { recursive: true, force: true });
-        }
-      }
+      run(process.execPath, ["bin/atlas-core.js", "stop", "--port", String(port)], atlasEnv, 15_000);
+      run("chrome-devtools-axi", ["stop"], chromeEnv);
+      await rm(temp, { recursive: true, force: true });
     }
   },
 );

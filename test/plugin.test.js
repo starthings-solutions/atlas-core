@@ -113,8 +113,8 @@ test("committed plugin.json stays in sync with package.json", async () => {
 
 test("normalizeRepositoryUrl converts npm git URLs to plain https", () => {
   assert.equal(
-    normalizeRepositoryUrl({ url: "git+https://github.com/starthings-solutions/atlas-core.git" }),
-    "https://github.com/starthings-solutions/atlas-core",
+    normalizeRepositoryUrl({ url: "git+https://github.com/kunchenguid/lavish-axi.git" }),
+    "https://github.com/kunchenguid/lavish-axi",
   );
   assert.equal(normalizeRepositoryUrl("https://example.com/x"), "https://example.com/x");
   assert.equal(normalizeRepositoryUrl(undefined), undefined);
@@ -134,7 +134,7 @@ test("the package root is itself a discoverable Agent Plugin", async () => {
   assert.deepEqual(
     discovered.map((entry) => entry.name),
     ["atlas-core"],
-    "exactly the atlas-core skill is discovered",
+    "exactly the atlas skill is discovered",
   );
 
   const skill = await readFile(path.join(root, "skills", "atlas-core", "SKILL.md"), "utf8");

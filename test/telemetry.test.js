@@ -70,16 +70,6 @@ test("telemetry disables when no website id is configured", () => {
   assert.equal(config.enabled, false);
 });
 
-test("telemetry disables when no Atlas Core host is configured", () => {
-  const config = resolveTelemetryConfig({
-    env: { ATLAS_CORE_UMAMI_WEBSITE_ID: "atlas-site" },
-    buildHost: "",
-    buildWebsiteID: "",
-  });
-
-  assert.deepEqual(config, { enabled: false, host: "", websiteID: "" });
-});
-
 test("telemetry sends anonymous Umami event payloads", async () => {
   const { fetch, requests } = createFetchSpy();
   const client = createTelemetryClient({

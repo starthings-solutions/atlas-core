@@ -1,5 +1,21 @@
 /* Shell chrome for the whiteboard frame. Bundled into dist/whiteboard/whiteboard.css
-   together with Excalidraw's own stylesheet by scripts/build.js. */
+   together with Excalidraw's own stylesheet by scripts/build.js. The frame follows the OS
+   color scheme: the dark branch resolves the Atlas Core OLED contract, the light branch
+   keeps a readable paper chrome with the same geometry and type. */
+
+:root {
+  --void: #000000;
+  --surface: #080808;
+  --surface-2: #101010;
+  --rule-2: #2e2e2e;
+  --ink-3: #787878;
+  --ink-2: #a3a3a3;
+  --hollow: #6a6a6a;
+  --app-ink: #f8f4eb;
+  --app-risk: #f87171;
+  --app-pending: #f2c14e;
+  --app-activity: #6fc7c2;
+}
 
 html,
 body {
@@ -8,20 +24,14 @@ body {
 }
 
 body {
-  font-family:
-    Geist,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    sans-serif;
+  font-family: "Archivo", ui-sans-serif, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
   background: #fffbf3;
   color: #17130a;
 }
 
 body[data-atlas-whiteboard-theme="dark"] {
-  background: #0f1115;
-  color: #f7f3ea;
+  background: var(--void);
+  color: var(--app-ink);
 }
 
 #wbShell {
@@ -51,7 +61,7 @@ body[data-atlas-whiteboard-theme="dark"] {
   flex: 1;
   min-width: 0;
   padding: 7px 10px;
-  border-radius: 8px;
+  border-radius: 3px;
   border: 1px solid rgba(128, 128, 128, 0.45);
   background: transparent;
   color: inherit;
@@ -59,44 +69,56 @@ body[data-atlas-whiteboard-theme="dark"] {
   font-size: 13px;
 }
 
+body[data-atlas-whiteboard-theme="dark"] #wbNote {
+  background: var(--surface-2);
+  border-color: var(--ink-3);
+}
+
 #wbHeader button {
   flex: none;
   border: 0;
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 8px 12px;
   font-weight: 700;
   font-size: 13px;
   cursor: pointer;
-  background: #f4c95d;
-  color: #17130a;
+  background: var(--app-ink);
+  color: var(--void);
 }
 
 #wbHeader button:hover {
-  background: #ffd877;
+  box-shadow: inset 0 0 0 1px var(--void);
 }
 
 #wbHeader button:disabled {
-  opacity: 0.6;
+  background: var(--rule-2);
+  color: var(--ink-3);
   cursor: default;
+}
+
+/* On the paper header the inversion needs its own edge, or the cream button dissolves. */
+body:not([data-atlas-whiteboard-theme="dark"]) #wbHeader button:not(:disabled):not(#wbFullscreen),
+body:not([data-atlas-whiteboard-theme="dark"]) #wbLinkConfirmOpen {
+  box-shadow: inset 0 0 0 1px #17130a;
 }
 
 .wb-banner {
   flex: none;
   padding: 8px 12px;
   font-size: 13px;
-  background: rgba(96, 165, 250, 0.16);
-  border-bottom: 1px solid rgba(96, 165, 250, 0.4);
+  background: rgb(111 199 194 / 0.16);
+  border-bottom: 1px solid rgb(111 199 194 / 0.4);
 }
 
 .wb-banner-warn {
-  background: rgba(244, 201, 93, 0.18);
-  border-bottom-color: rgba(244, 201, 93, 0.55);
+  background: rgb(242 193 78 / 0.18);
+  border-bottom-color: rgb(242 193 78 / 0.55);
 }
 
 .wb-banner button {
   margin-left: 8px;
   border: 1px solid rgba(128, 128, 128, 0.5);
-  border-radius: 6px;
+  border-radius: 2px;
   background: transparent;
   color: inherit;
   font-size: 12px;
@@ -108,8 +130,8 @@ body[data-atlas-whiteboard-theme="dark"] {
   flex: none;
   padding: 8px 12px;
   font-size: 13px;
-  background: rgba(52, 211, 153, 0.14);
-  border-bottom: 1px solid rgba(52, 211, 153, 0.4);
+  background: rgb(111 199 194 / 0.14);
+  border-bottom: 1px solid rgb(111 199 194 / 0.4);
 }
 
 #wbEditor {
@@ -127,6 +149,10 @@ body[data-atlas-whiteboard-theme="dark"] {
   background: rgba(23, 19, 10, 0.42);
 }
 
+body[data-atlas-whiteboard-theme="dark"] .wb-link-confirm {
+  background: rgb(0 0 0 / 0.72);
+}
+
 .wb-link-confirm[hidden] {
   display: none;
 }
@@ -136,9 +162,8 @@ body[data-atlas-whiteboard-theme="dark"] {
   box-sizing: border-box;
   padding: 18px;
   border: 1px solid rgba(128, 128, 128, 0.45);
-  border-radius: 12px;
+  border-radius: 3px;
   background: #fffbf3;
-  box-shadow: 0 16px 42px rgba(23, 19, 10, 0.26);
 }
 
 .wb-link-confirm-title {
@@ -156,9 +181,9 @@ body[data-atlas-whiteboard-theme="dark"] {
   overflow: auto;
   overflow-wrap: anywhere;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: 2px;
   background: rgba(128, 128, 128, 0.12);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .wb-link-confirm-actions {
@@ -170,7 +195,7 @@ body[data-atlas-whiteboard-theme="dark"] {
 
 .wb-link-confirm-actions button {
   border: 1px solid rgba(128, 128, 128, 0.5);
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 8px 12px;
   background: transparent;
   color: inherit;
@@ -186,17 +211,18 @@ body[data-atlas-whiteboard-theme="dark"] {
 
 #wbLinkConfirmOpen {
   border-color: transparent;
-  background: #f4c95d;
-  color: #17130a;
+  background: var(--app-ink);
+  color: var(--void);
 }
 
 #wbLinkConfirmOpen:hover {
-  background: #ffd877;
+  box-shadow: inset 0 0 0 1px var(--void);
+  background: var(--app-ink);
 }
 
 body[data-atlas-whiteboard-theme="dark"] .wb-link-confirm-card {
-  background: #1a1d23;
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.45);
+  background: var(--surface);
+  border-color: var(--rule-2);
 }
 
 /* Inline placement: no chrome close control floats over the header, so drop
@@ -210,6 +236,10 @@ body[data-atlas-whiteboard-mode="inline"] #wbHeader {
   border: 1px solid rgba(128, 128, 128, 0.45);
   color: inherit;
   font-weight: 600;
+}
+
+#wbFullscreen:hover {
+  box-shadow: none;
 }
 
 body[data-atlas-whiteboard-theme="dark"] #wbFullscreen:hover,
@@ -236,14 +266,13 @@ body[data-atlas-whiteboard-theme="dark"] #wbFullscreen:hover,
   font-weight: 600;
   letter-spacing: 0.04em;
   padding: 6px 12px;
-  border-radius: 999px;
-  background: rgba(23, 19, 10, 0.72);
-  color: #f4c95d;
-  border: 1px solid rgba(244, 201, 93, 0.55);
-  opacity: 0.85;
+  border-radius: 2px;
+  background: var(--void);
+  color: var(--app-ink);
+  border: 1px solid var(--ink-3);
 }
 
 .wb-activate:hover .wb-activate-label,
 .wb-activate:focus-visible .wb-activate-label {
-  opacity: 1;
+  border-color: var(--app-activity);
 }

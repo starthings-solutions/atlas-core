@@ -22,7 +22,8 @@ export const PLAYBOOKS = [
     ],
     design_rules: [
       "Size with viewBox plus width:100%; never fixed pixel dimensions, and keep every element inside the viewBox.",
-      "Color through currentColor and the page's CSS custom properties so figures follow the artifact's light and dark themes.",
+      "Color through currentColor and the page's CSS custom properties so figures follow the artifact's theme; on the Atlas Core OLED default, series resolve to the categorical slots (`--c1`, then `--c3`, `--c4`, `--c5`) from `atlas-core design`, with `--c2` reserved for risk - never one color for every series and never a UI state color as a series.",
+      "Pair every diagram color with its text label, node shape, and count so the figure reads without color.",
       "Give every meaningful node, edge, and region a stable id and a <title> so reviewers can annotate precisely.",
       "Keep labels to a few words and put prose beside the figure in HTML - SVG text does not wrap, so short labels are also the overflow discipline.",
       "Keep figures self-contained: no external images, fonts, or scripts, so exports render offline.",
@@ -57,6 +58,7 @@ export const PLAYBOOKS = [
       "Use semantic table markup when the data is tabular.",
       "Protect long paths, code symbols, URLs, and prose from overflowing on narrow screens.",
       "Use restrained color for status and severity so the table remains readable when printed or skimmed.",
+      "On the Atlas Core OLED default, separate rows with 1px wires and a hover surface rather than zebra striping, and signal status with color plus label plus shape - done is the solid activity seal, never a green.",
     ],
     pitfalls: [
       "Do not paste a terminal table into HTML and call it done.",

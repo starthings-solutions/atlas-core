@@ -13,7 +13,7 @@ import {
   validateSkillMarkdown,
 } from "../src/skill.js";
 
-test("createSkillMarkdown emits valid frontmatter naming the Atlas Core skill", () => {
+test("createSkillMarkdown emits valid frontmatter naming the atlas skill", () => {
   const { frontmatter, errors } = parseSkillFrontmatter(createSkillMarkdown());
 
   assert.deepEqual(errors, [], "frontmatter parses as plain block-style YAML");

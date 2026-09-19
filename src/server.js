@@ -99,36 +99,25 @@ const designAssetUrls = {
     type: "application/javascript",
   },
 };
-const chromeFontAssetUrls = {
-  "archivo-latin-wdth-normal.woff2": {
-    packaged: new URL("./chrome-fonts/archivo-latin-wdth-normal.woff2", import.meta.url),
-    source: new URL(
-      "../node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2",
-      import.meta.url,
-    ),
-  },
-  "ibm-plex-mono-latin-400-normal.woff2": {
-    packaged: new URL("./chrome-fonts/ibm-plex-mono-latin-400-normal.woff2", import.meta.url),
-    source: new URL(
-      "../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2",
-      import.meta.url,
-    ),
-  },
-  "ibm-plex-mono-latin-500-normal.woff2": {
-    packaged: new URL("./chrome-fonts/ibm-plex-mono-latin-500-normal.woff2", import.meta.url),
-    source: new URL(
-      "../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2",
-      import.meta.url,
-    ),
-  },
-  "ibm-plex-mono-latin-600-normal.woff2": {
-    packaged: new URL("./chrome-fonts/ibm-plex-mono-latin-600-normal.woff2", import.meta.url),
-    source: new URL(
-      "../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2",
-      import.meta.url,
-    ),
-  },
+
+// Chrome type: the exact allowlist scripts/build.js vendors into dist/fonts.
+// Only these filenames resolve; anything else is a 404, never a path walk.
+const fontAssetSources = {
+  "archivo-latin-wdth-normal.woff2": "@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2",
+  "archivo-latin-ext-wdth-normal.woff2": "@fontsource-variable/archivo/files/archivo-latin-ext-wdth-normal.woff2",
+  "ibm-plex-mono-latin-400-normal.woff2": "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2",
+  "ibm-plex-mono-latin-500-normal.woff2": "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2",
+  "ibm-plex-mono-latin-600-normal.woff2": "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2",
 };
+const fontAssetUrls = Object.fromEntries(
+  Object.entries(fontAssetSources).map(([file, source]) => [
+    file,
+    {
+      packaged: new URL(`./fonts/${file}`, import.meta.url),
+      source: new URL(`../node_modules/${source}`, import.meta.url),
+    },
+  ]),
+);
 
 const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60_000;
 const WHITEBOARD_CHANNEL_TOKEN_TTL_MS = 5 * 60_000;
@@ -336,8 +325,8 @@ export async function serve({
   const diagnosticViewportClasses = resolveDiagnosticViewportClasses();
   const verbose = debug || env.ATLAS_CORE_DEBUG === "1";
   const writeLog = typeof log === "function" ? log : (line) => process.stderr.write(`${line}\n`);
-  const logEvent = verbose ? (line) => writeLog(`[atlas-core] ${line}`) : null;
-  if (networkWarning) writeLog(`[atlas-core] WARNING: ${networkWarning}`);
+  const logEvent = verbose ? (line) => writeLog(`[atlas] ${line}`) : null;
+  if (networkWarning) writeLog(`[atlas] WARNING: ${networkWarning}`);
   let publicPort = port;
   let serverReady = false;
   let networkReconcileCheckedAt = 0;
@@ -499,12 +488,12 @@ export async function serve({
     const persistedNothing = !session || Boolean(session.rejected) || Boolean(session.conflict);
     if (restoreError) {
       writeLog(
-        `[atlas-core] closed poll feedback restore failed; the batch was lost: ${restoreError?.message || restoreError}`,
+        `[atlas] closed poll feedback restore failed; the batch was lost: ${restoreError?.message || restoreError}`,
       );
     } else if (persistedNothing) {
-      writeLog("[atlas-core] closed poll feedback restore was refused; nothing was persisted and the batch was lost");
+      writeLog("[atlas] closed poll feedback restore was refused; nothing was persisted and the batch was lost");
     } else if (!restoredPrompts || JSON.stringify(restoredPrompts) !== JSON.stringify(prompts) || !failuresRestored) {
-      writeLog("[atlas-core] closed poll feedback restore was incomplete; delivery was not marked");
+      writeLog("[atlas] closed poll feedback restore was incomplete; delivery was not marked");
     }
     const pendingAfterRestore =
       (Array.isArray(restoredPrompts) && restoredPrompts.length > 0) ||
@@ -1337,16 +1326,6 @@ export async function serve({
     }
   });
 
-  app.get("/chrome-fonts/:asset", async (req, res, next) => {
-    try {
-      const asset = chromeFontAssetUrls[req.params.asset];
-      if (!asset) return res.status(404).send("Not found");
-      res.type("font/woff2").send(await readChromeFontAsset(asset));
-    } catch (error) {
-      next(error);
-    }
-  });
-
   app.get("/design/:asset", async (req, res, next) => {
     try {
       const asset = designAssetUrls[req.params.asset];
@@ -1355,6 +1334,19 @@ export async function serve({
         return;
       }
       res.type(asset.type).send(await readDesignAsset(asset));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/fonts/:file", async (req, res, next) => {
+    try {
+      const asset = fontAssetUrls[req.params.file];
+      if (!asset) {
+        res.status(404).send("Not found");
+        return;
+      }
+      res.type("font/woff2").send(await readFontAsset(asset));
     } catch (error) {
       next(error);
     }
@@ -1741,7 +1733,7 @@ export async function serve({
         if (listenHost === tailscale?.ipv4) {
           networkWarning =
             "Tailscale binding failed; there is no phone access. Atlas Core remains available on loopback.";
-          writeLog(`[atlas-core] WARNING: ${networkWarning} Address: ${listenHost}:${boundPort}.`);
+          writeLog(`[atlas] WARNING: ${networkWarning} Address: ${listenHost}:${boundPort}.`);
         } else {
           logEvent?.(`failed to bind ${listenHost}:${boundPort}: ${error instanceof Error ? error.message : error}`);
         }
@@ -1973,21 +1965,22 @@ function createDeniedHtml({ title, message, workingUrl }) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle} - Atlas Core</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f4ef;color:#25221f;font:16px/1.5 system-ui,sans-serif}.card{width:min(560px,calc(100% - 40px));padding:32px;border:1px solid #d9d0c5;border-radius:16px;background:#fffdf9;box-shadow:0 12px 40px #25221f18}h1{margin:0 0 12px;font-size:26px}p{margin:0 0 18px}.url{display:block;padding:12px 14px;border-radius:10px;background:#f0ebe4;color:#25221f;overflow-wrap:anywhere}a{color:inherit;font-weight:700}</style></head><body><main class="card"><h1>${safeTitle}</h1><p>${safeMessage}</p><p>Open this working URL:</p><a class="url" href="${safeUrl}">${safeUrl}</a></main></body></html>`;
 }
 
-async function readAssetWithFallback(asset, encoding) {
+async function readDesignAsset(asset) {
   try {
-    return await readFile(asset.packaged, encoding);
+    return await readFile(asset.packaged, "utf8");
   } catch (error) {
     if (error && error.code !== "ENOENT") throw error;
-    return readFile(asset.source, encoding);
+    return readFile(asset.source, "utf8");
   }
 }
 
-function readDesignAsset(asset) {
-  return readAssetWithFallback(asset, "utf8");
-}
-
-function readChromeFontAsset(asset) {
-  return readAssetWithFallback(asset);
+async function readFontAsset(asset) {
+  try {
+    return await readFile(asset.packaged);
+  } catch (error) {
+    if (error && error.code !== "ENOENT") throw error;
+    return readFile(asset.source);
+  }
 }
 
 // Map a legacy root-absolute `/design/<asset>` reference to the packaged design file on disk
@@ -2219,79 +2212,18 @@ async function watchSession(session, watchers, events, logEvent, reloadDebounceM
     return;
   }
   logEvent?.(`watch session=${session.key} scope=${target.scope} path=${target.path}`);
+  const watcher = chokidar.watch(target.path, target.options);
   let timer = null;
-  const watcher = createResilientWatcher(target, {
-    onAll(event, file) {
-      logEvent?.(`watch event=${event} session=${session.key} file=${file ?? ""}`);
-      clearTimeout(timer);
-      timer = setTimeout(() => events.emit("reload", session.key), reloadDebounceMs(session.key));
-    },
-    onFallback(error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logEvent?.(`watch fallback=polling session=${session.key} message=${message}`);
-    },
-    onError(error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logEvent?.(`watch error session=${session.key} message=${message}`);
-    },
+  watcher.on("all", (event, file) => {
+    logEvent?.(`watch event=${event} session=${session.key} file=${file ?? ""}`);
+    clearTimeout(timer);
+    timer = setTimeout(() => events.emit("reload", session.key), reloadDebounceMs(session.key));
+  });
+  watcher.on("error", (error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    logEvent?.(`watch error session=${session.key} message=${message}`);
   });
   watchers.set(session.key, watcher);
-}
-
-/**
- * @param {{ path: string, options: Record<string, any> }} target
- * @param {{
- *   watch?: (path: string, options: Record<string, any>) => { on: (event: string, listener: (...args: any[]) => void) => unknown, close: () => Promise<void> },
- *   onAll?: (event: string, file?: string) => void,
- *   onError?: (error: any) => void,
- *   onFallback?: (error: any) => void
- * }} [callbacks]
- */
-export function createResilientWatcher(
-  target,
-  { watch = chokidar.watch.bind(chokidar), onAll = () => {}, onError = () => {}, onFallback = () => {} } = {},
-) {
-  let activeWatcher;
-  let closed = false;
-  let fallbackStarted = false;
-
-  const attach = (watcher, polling) => {
-    watcher.on("all", onAll);
-    watcher.on("error", (error) => {
-      const watchLimitReached =
-        error?.code === "ENOSPC" ||
-        error?.code === "EMFILE" ||
-        /\b(?:ENOSPC|EMFILE)\b/.test(String(error?.message || error));
-      if (polling || fallbackStarted || !watchLimitReached) {
-        onError(error);
-        return;
-      }
-
-      fallbackStarted = true;
-      onFallback(error);
-      Promise.resolve(watcher.close())
-        .catch(() => {})
-        .then(() => {
-          if (closed) return;
-          try {
-            activeWatcher = watch(target.path, { ...target.options, usePolling: true });
-            attach(activeWatcher, true);
-          } catch (fallbackError) {
-            onError(fallbackError);
-          }
-        });
-    });
-  };
-
-  activeWatcher = watch(target.path, target.options);
-  attach(activeWatcher, false);
-
-  return {
-    async close() {
-      closed = true;
-      await activeWatcher.close();
-    },
-  };
 }
 
 // Watching the artifact's parent directory recursively can stall the event loop when the
@@ -2417,8 +2349,9 @@ const chromeIcons = {
   ),
   reveal: chromeIcon('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>', 13),
   dismiss: chromeIcon('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>', 13),
-  // Conversation disclosure chevron for the desktop drawer and mobile bottom sheet.
+  // The mobile conversation sheet's only chevron: CSS rotates it when the sheet is open.
   chevronUp: chromeIcon('<polyline points="6 15 12 9 18 15"/>', 18, 2),
+  chat: chromeIcon('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>', 15),
 };
 
 // Display the path with the home directory shortened to "~", split so the directory part can
@@ -2473,8 +2406,13 @@ function normalizeFlagValue(value) {
   return value === undefined || value === null ? "" : String(value).trim().toLowerCase();
 }
 
+// The OLED mark: a hollow ink-3 square with a white quadrant, on void black. Shared by the
+// chrome tab fallback and the top-bar brand (see createChromeHtml).
+export const ATLAS_BRAND_MARK_SVG =
+  "<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18' aria-hidden='true'><rect x='1' y='1' width='16' height='16' fill='none' stroke='#787878' stroke-width='1.5'/><rect x='9.5' y='9.5' width='6' height='6' fill='#ffffff'/></svg>";
+
 const ATLAS_DEFAULT_FAVICON =
-  "<link rel=\"icon\" href=\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>\u{1F48E}</text></svg>\">";
+  "<link rel=\"icon\" href=\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'><rect width='18' height='18' fill='black'/><rect x='1' y='1' width='16' height='16' fill='none' stroke='%23787878' stroke-width='1.5'/><rect x='9.5' y='9.5' width='6' height='6' fill='white'/></svg>\">";
 
 function readTagAttr(tag, name) {
   // Tokenize real attributes rather than searching for the bare name anywhere in
@@ -2626,8 +2564,8 @@ ${faviconTag}
 <link rel="stylesheet" href="/chrome.css">
 </head>
 <body class="${bodyClass}">
-<div class="bar"><div class="brand"><span class="brand-mark">Atlas Core</span><span class="brand-support">Editor</span></div><div class="spacer" aria-hidden="true"></div><div class="warnings-wrap" id="warningsWrap" hidden><button class="warnings-button" id="warningsButton" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="warningsDrawer">${chromeIcons.warning}<span class="warnings-count" id="warningsCount">0</span></button><div class="menu warnings-drawer" id="warningsDrawer" role="dialog" aria-labelledby="warningsTitle" aria-describedby="warningsSummary" hidden><div class="warnings-head"><h2 class="warnings-title" id="warningsTitle">Layout issues</h2><p class="warnings-summary" id="warningsSummary"></p></div><div class="warnings-toolbar"><label class="warnings-selectall"><input type="checkbox" id="warningsSelectAll"><span>Select all</span></label><span class="warnings-selected" id="warningsSelected" role="status" aria-live="polite"></span></div><div class="warnings-list" id="warningsList"></div><div class="warnings-foot"><p class="warnings-note">Queueing sends a repair request with your next feedback. An issue is marked resolved only after a newer artifact load and a complete check at the same viewport no longer finds it.</p><button class="button" id="warningsQueueButton" type="button" disabled>Queue selected fixes</button></div></div></div><button class="annotate-switch" id="annotation" type="button" aria-pressed="true" title="${escapeHtml(modeToggleHint)}"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span><span>Annotate</span></button><div class="more-wrap" id="moreWrap"><button class="more-button" id="moreButton" type="button" title="More" aria-haspopup="menu" aria-expanded="false">${chromeIcons.more}</button><div class="menu more-menu" id="moreMenu" hidden><div class="menu-head"><div class="menu-label">Editing</div><button class="menu-file" id="copyPath" type="button" title="Copy path · ${escapeHtml(session.file)}">${chromeIcons.file}<span class="menu-file-text"><span class="path-head">${escapeHtml(pathHead)}</span><span class="path-tail">${escapeHtml(pathTail)}</span></span><span class="copy-hint" id="copyHint"><span class="icon-copy">${chromeIcons.copy}</span><span class="icon-check">${chromeIcons.check}</span><span id="copyHintText">Copy</span></span></button></div><div class="menu-rule"></div><button class="menu-item" id="reloadArtifact" type="button">${chromeIcons.refresh}<span>Reload artifact</span></button><button class="menu-item" id="copySnapshot" type="button">${chromeIcons.camera}<span>Copy DOM snapshot</span></button><button class="menu-item" id="exportArtifact" type="button">${chromeIcons.download}<span>Export standalone HTML</span></button><button class="menu-item" id="shareArtifact" type="button">${chromeIcons.globe}<span>Publish link</span></button><div class="menu-rule"></div><button class="menu-item danger" id="end" type="button">${chromeIcons.exit}<span>End session</span></button></div></div></div>
-<div class="layout"><div class="frame"><iframe id="artifact" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" data-artifact-src="/artifact/${session.key}/index.html"></iframe></div><div class="panel-scrim" id="panelScrim"></div><aside class="panel" id="panel" aria-labelledby="conversationTitle"><div class="panel-head" id="panelHead"><span class="panel-handle" aria-hidden="true"></span><div class="panel-head-row"><h2 id="conversationTitle">Conversation</h2><span class="panel-summary" id="panelSummary" role="status" aria-live="polite"></span><button class="panel-toggle" id="panelToggle" type="button" aria-expanded="false" aria-controls="panel" aria-label="Show conversation">${chromeIcons.chevronUp}</button></div></div><div class="panel-scroll" id="panelScroll" inert><div class="chat" id="chatLog"></div><div class="chat chat-queued" id="queuedLog"></div></div><div class="composer" id="chatComposer" inert><div class="presence-banner handoff-banner" id="handoffBanner" hidden><span>This review is open in another Atlas Core tab.</span><button class="handoff-takeover" id="handoffTakeover" type="button">Take over here</button></div><div class="presence-banner handoff-banner" id="outdatedBanner" hidden><span id="outdatedText">The Atlas Core server this page was connected to is no longer running. Reloading will work once it is running again.</span><span class="outdated-actions"><button class="handoff-takeover" id="outdatedReload" type="button">Check and reload</button><button class="handoff-takeover" id="outdatedDismiss" type="button">Dismiss</button></span></div><div class="presence-banner" id="presenceBanner" hidden>Your agent is not listening. If this persists, ask your agent to poll for updates from Atlas Core.</div><textarea id="chatInput" placeholder="Write a message for the agent..."></textarea><div class="chat-attachments" id="chatAttachments"></div><div class="chat-attachment-toolbar"><button class="chat-attach" id="chatAttach" type="button">Attach images</button><input id="chatAttachInput" type="file" accept="${escapeHtml(acceptedMime.join(","))}" multiple hidden><span class="chat-attachment-notice" id="chatAttachmentNotice" role="status"></span></div><div class="send-hint" id="sendHint" hidden>Write a message or annotate an element first.</div><div class="actions" id="sendActions"><button class="button button-danger" id="sendAndEnd" type="button">${chromeIcons.exit}<span>Send &amp; End</span></button><button class="button" id="send">Send to Agent</button></div></div></aside></div>
+<div class="bar"><div class="brand"><span class="brand-mark">${ATLAS_BRAND_MARK_SVG}</span><span class="brand-support">Atlas Core</span></div><div class="spacer" aria-hidden="true"></div><div class="warnings-wrap" id="warningsWrap" hidden><button class="warnings-button" id="warningsButton" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="warningsDrawer">${chromeIcons.warning}<span class="warnings-count" id="warningsCount">0</span></button><div class="menu warnings-drawer" id="warningsDrawer" role="dialog" aria-labelledby="warningsTitle" aria-describedby="warningsSummary" hidden><div class="warnings-head"><h2 class="warnings-title" id="warningsTitle">Layout issues</h2><p class="warnings-summary" id="warningsSummary"></p></div><div class="warnings-toolbar"><label class="warnings-selectall"><input type="checkbox" id="warningsSelectAll"><span>Select all</span></label><span class="warnings-selected" id="warningsSelected" role="status" aria-live="polite"></span></div><div class="warnings-list" id="warningsList"></div><div class="warnings-foot"><p class="warnings-note">Queueing sends a repair request with your next feedback. An issue is marked resolved only after a newer artifact load and a complete check at the same viewport no longer finds it.</p><button class="button" id="warningsQueueButton" type="button" disabled>Queue selected fixes</button></div></div></div><button class="annotate-switch" id="annotation" type="button" aria-pressed="true" title="${escapeHtml(modeToggleHint)}"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span><span>Annotate</span></button><button class="conversation-toggle" id="conversationToggle" type="button" aria-expanded="false" aria-controls="panel" aria-label="Show conversation"><span class="conversation-icon" aria-hidden="true">${chromeIcons.chat}<span class="unread-dot" id="conversationUnread" hidden></span></span><span>Conversation</span></button><div class="more-wrap" id="moreWrap"><button class="more-button" id="moreButton" type="button" title="More" aria-haspopup="menu" aria-expanded="false">${chromeIcons.more}</button><div class="menu more-menu" id="moreMenu" hidden><div class="menu-head"><div class="menu-label">Editing</div><button class="menu-file" id="copyPath" type="button" title="Copy path · ${escapeHtml(session.file)}">${chromeIcons.file}<span class="menu-file-text"><span class="path-head">${escapeHtml(pathHead)}</span><span class="path-tail">${escapeHtml(pathTail)}</span></span><span class="copy-hint" id="copyHint"><span class="icon-copy">${chromeIcons.copy}</span><span class="icon-check">${chromeIcons.check}</span><span id="copyHintText">Copy</span></span></button></div><div class="menu-rule"></div><button class="menu-item" id="reloadArtifact" type="button">${chromeIcons.refresh}<span>Reload artifact</span></button><button class="menu-item" id="copySnapshot" type="button">${chromeIcons.camera}<span>Copy DOM snapshot</span></button><button class="menu-item" id="exportArtifact" type="button">${chromeIcons.download}<span>Export standalone HTML</span></button><button class="menu-item" id="shareArtifact" type="button">${chromeIcons.globe}<span>Publish link</span></button><div class="menu-rule"></div><button class="menu-item danger" id="end" type="button">${chromeIcons.exit}<span>End session</span></button></div></div></div>
+<div class="layout"><div class="frame"><iframe id="artifact" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" data-artifact-src="/artifact/${session.key}/index.html"></iframe></div><div class="panel-scrim" id="panelScrim"></div><aside class="panel" id="panel"><div class="panel-head" id="panelHead"><span class="panel-handle" aria-hidden="true"></span><div class="panel-head-row"><h2>Conversation</h2><span class="panel-summary" id="panelSummary" role="status" aria-live="polite"></span><button class="panel-toggle" id="panelToggle" type="button" aria-expanded="false" aria-controls="panel" aria-label="Show conversation">${chromeIcons.chevronUp}</button></div></div><div class="panel-scroll" id="panelScroll"><div class="chat" id="chatLog"></div><div class="chat chat-queued" id="queuedLog"></div></div><div class="composer" id="chatComposer"><div class="presence-banner handoff-banner" id="handoffBanner" hidden><span>This review is open in another Atlas Core tab.</span><button class="handoff-takeover" id="handoffTakeover" type="button">Take over here</button></div><div class="presence-banner handoff-banner" id="outdatedBanner" hidden><span id="outdatedText">The Atlas Core server this page was connected to is no longer running. Reloading will work once it is running again.</span><span class="outdated-actions"><button class="handoff-takeover" id="outdatedReload" type="button">Check and reload</button><button class="handoff-takeover" id="outdatedDismiss" type="button">Dismiss</button></span></div><div class="presence-banner" id="presenceBanner" hidden>Your agent is not listening. If this persists, ask your agent to poll for updates from Atlas Core.</div><textarea id="chatInput" placeholder="Write a message for the agent..."></textarea><div class="chat-attachments" id="chatAttachments"></div><div class="chat-attachment-toolbar"><button class="chat-attach" id="chatAttach" type="button">Attach images</button><input id="chatAttachInput" type="file" accept="${escapeHtml(acceptedMime.join(","))}" multiple hidden><span class="chat-attachment-notice" id="chatAttachmentNotice" role="status"></span></div><div class="send-hint" id="sendHint" hidden>Write a message or annotate an element first.</div><div class="actions" id="sendActions"><button class="button button-danger" id="sendAndEnd" type="button">${chromeIcons.exit}<span>Send &amp; End</span></button><button class="button" id="send">Send to Agent</button></div></div></aside></div>
 <div class="share-overlay" id="shareDialog" role="dialog" aria-modal="true" aria-labelledby="shareTitleText" hidden><form class="share-card" id="shareForm"><div class="share-head"><div><div class="share-kicker">Publish to <a class="share-link" href="https://ht-ml.app" target="_blank" rel="noopener noreferrer">ht-ml.app</a></div><h2 id="shareTitleText">Publish artifact</h2></div><button class="share-close" id="shareClose" type="button" aria-label="Close publish dialog"><svg width="14" height="14" viewBox="0 0 10 10" fill="none" aria-hidden="true" focusable="false"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button></div><p class="share-note">ht-ml.app is a separate, third-party hosting service, not part of Atlas Core. Publishing sends this artifact to its servers.</p><p class="share-copy">This uploads this artifact to ht-ml.app with local assets inlined. Without a password, the page is PUBLIC and anyone with the link can open it. With a password, the page is PRIVATE and viewers must supply the password to view.</p><p class="share-note">Do not publish secrets. The Atlas Core annotation SDK is not included.</p><div class="share-grid"><label class="share-check"><input id="shareGenerate" type="checkbox"><span>Generate a password (makes this page private)</span></label><label>Password (optional)<input id="sharePassword" name="password" type="password" autocomplete="new-password" placeholder="Leave blank for a public page"></label></div><div class="share-status" id="shareStatus" role="status"></div><div class="share-result" id="shareResult" hidden><label id="shareUrlResult">Share URL<div class="share-copy-row"><input id="shareUrl" readonly><button class="share-copy-btn" id="copyShareUrl" type="button">Copy URL</button></div></label><label id="sharePasswordResult" hidden>Password (shared secret)<div class="share-copy-row"><input id="sharePasswordOut" readonly><button class="share-copy-btn" id="copySharePassword" type="button">Copy password</button></div></label><label id="shareSiteIdResult" hidden>Site ID<div class="share-copy-row"><input id="shareSiteId" readonly><button class="share-copy-btn" id="copyShareSiteId" type="button">Copy site ID</button></div></label><label id="shareUpdateKeyResult">Update key (secret)<div class="share-copy-row"><input id="shareUpdateKey" readonly><button class="share-copy-btn" id="copyUpdateKey" type="button">Copy key</button></div></label><p class="share-note" id="shareUpdateKeyNote">Keep the update key private. ht-ml.app returns it once and it is the only way to update this page later; the service has no delete. Republish this page&#39;s HTML with <code>atlas-core share &lt;file&gt; --site &lt;site id&gt; --update-key &lt;key&gt;</code>, and add <code>--private</code> to also lock it behind a new generated password.</p></div><div class="share-actions"><button class="share-cancel" id="shareCancel" type="button">Cancel</button><button class="button" id="sharePublish" type="submit">Publish</button></div></form></div>
 <div class="ended-overlay layout-gate-overlay" id="layoutGateOverlay"${layoutGateHidden}><div class="ended-card"><div class="ended-title" id="layoutGateTitle">Checking layout.<br>One moment.</div><p class="ended-copy" id="layoutGateCopy">Atlas Core is waiting for fonts and final geometry before revealing this artifact.</p><button class="button ended-action" id="layoutGateAction" type="button">Show anyway</button><button class="button ended-action layout-gate-bypass" id="layoutGateBypass" type="button" hidden>Show anyway</button></div></div>
 <div class="ended-overlay" id="endedOverlay" hidden><div class="ended-card"><div class="ended-title">Session ended.<br>Return to your agent to continue.</div><p class="ended-copy">${escapeHtml(session.file)}</p></div></div>

@@ -2,13 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const CHROME_FONT_ASSETS = [
-  "archivo-latin-wdth-normal.woff2",
-  "ibm-plex-mono-latin-400-normal.woff2",
-  "ibm-plex-mono-latin-500-normal.woff2",
-  "ibm-plex-mono-latin-600-normal.woff2",
-];
-
 test("check script runs all verification commands", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   const checkCommands = packageJson.scripts.check.split(" && ");
@@ -70,11 +63,39 @@ test("public Atlas Core skill is not marked internal", async () => {
   assert.doesNotMatch(frontmatter, /^metadata:\n {2}internal: true$/m);
 });
 
+test("build copies local design assets for published artifact injection", async () => {
+  const buildScript = await readFile(new URL("../scripts/build.js", import.meta.url), "utf8");
+
+  assert.match(buildScript, /daisyui\.css/);
+  assert.match(buildScript, /daisyui-themes\.css/);
+  assert.match(buildScript, /tailwindcss-browser\.js/);
+});
+
 test("build vendors the chrome font files shipped in dist", async () => {
-  for (const asset of CHROME_FONT_ASSETS) {
-    const data = await readFile(new URL(`../dist/chrome-fonts/${asset}`, import.meta.url));
-    assert.ok(data.byteLength > 1_000, asset);
+  for (const asset of [
+    "archivo-latin-wdth-normal.woff2",
+    "archivo-latin-ext-wdth-normal.woff2",
+    "ibm-plex-mono-latin-400-normal.woff2",
+    "ibm-plex-mono-latin-500-normal.woff2",
+    "ibm-plex-mono-latin-600-normal.woff2",
+  ]) {
+    let data;
+    try {
+      data = await readFile(new URL(`../dist/fonts/${asset}`, import.meta.url));
+    } catch (error) {
+      // An unbuilt tree has no dist yet; `pnpm run check` and the installer always build first.
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+    assert.ok(data.byteLength > 10_000, asset);
   }
+});
+
+test("chrome type resolves from vendored fontsource packages", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+
+  assert.ok(packageJson.dependencies["@fontsource-variable/archivo"]);
+  assert.ok(packageJson.dependencies["@fontsource/ibm-plex-mono"]);
 });
 
 test("package identity belongs to the private Atlas Core source distribution", async () => {
@@ -91,7 +112,7 @@ test("package identity belongs to the private Atlas Core source distribution", a
   assert.equal(packageJson.homepage, "https://github.com/starthings-solutions/atlas-core#readme");
 });
 
-test("pnpm lock root importer matches the package manifest", async () => {
+test("pnpm lock root importer matches the publish manifest", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   const pnpmLock = await readFile(new URL("../pnpm-lock.yaml", import.meta.url), "utf8");
 

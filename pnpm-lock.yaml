@@ -7,6 +7,12 @@ settings:
 importers:
   .:
     dependencies:
+      "@fontsource-variable/archivo":
+        specifier: ^5.3.0
+        version: 5.3.0
+      "@fontsource/ibm-plex-mono":
+        specifier: ^5.3.0
+        version: 5.3.0
       "@tailwindcss/browser":
         specifier: 4.2.4
         version: 4.2.4
@@ -44,12 +50,6 @@ importers:
       "@excalidraw/mermaid-to-excalidraw":
         specifier: 2.2.2
         version: 2.2.2
-      "@fontsource-variable/archivo":
-        specifier: 5.3.0
-        version: 5.3.0
-      "@fontsource/ibm-plex-mono":
-        specifier: 5.3.0
-        version: 5.3.0
       "@types/node":
         specifier: ^25.6.2
         version: 25.7.0
