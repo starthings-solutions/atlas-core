@@ -758,14 +758,16 @@ test("annotation card title renders selected tag as an html element name", () =>
   assert.match(js, /"Annotate &lt;" \+ c\.tag \+ "&gt;"/);
 });
 
-test("annotation card shadow styles use Atlas Core design-system variables", () => {
+test("annotation card shadow styles use Atlas Core OLED variables", () => {
   const js = createSdkJs("abc");
 
-  assert.match(js, /--ink-900:#0f1115/);
-  assert.match(js, /--accent:#f4c95d/);
-  assert.match(js, /--font-sans:/);
+  assert.match(js, /--void:#000000/);
+  assert.match(js, /--app-activity:#6fc7c2/);
+  assert.match(js, /--accent:var\(--app-activity\)/);
+  assert.match(js, /--font-sans:"Archivo"/);
   assert.match(js, /font-family:var\(--font-sans\)/);
-  assert.match(js, /:focus-visible\{outline:2px solid var\(--accent\);outline-offset:2px/);
+  assert.match(js, /:focus-visible\{outline:2px solid var\(--accent\);outline-offset:3px/);
+  assert.match(js, /\.atlas-send\{background:var\(--app-ink\);color:var\(--void\)\}/);
 });
 
 test("chrome top bar uses an Annotate switch instead of a labeled toggle button", () => {
@@ -821,10 +823,10 @@ test("chrome declares the Atlas Core OLED tokens", async () => {
 test("artifact SDK uses design-token aliases for annotation highlight and shadow UI", () => {
   const js = createSdkJs("abc");
 
-  assert.match(js, /--atlas-accent:#f4c95d/);
+  assert.match(js, /--atlas-accent:#6fc7c2/);
   assert.match(js, /--atlas-annotate-outline:2px solid var\(--atlas-accent\)/);
-  assert.match(js, /el\.style\.outline\s*=\s*["']var\(--atlas-annotate-outline,2px solid #f4c95d\)["']/);
-  assert.match(js, /el\.style\.outlineOffset\s*=\s*["']var\(--atlas-annotate-offset,2px\)["']/);
+  assert.match(js, /el\.style\.outline\s*=\s*["']var\(--atlas-annotate-outline,2px solid #6fc7c2\)["']/);
+  assert.match(js, /el\.style\.outlineOffset\s*=\s*["']var\(--atlas-annotate-offset,3px\)["']/);
   assert.match(js, /--fg-faint:var\(--steel-300\)/);
   assert.match(js, /textarea::placeholder\{color:var\(--fg-faint\)\}/);
   assert.doesNotMatch(js, /placeholder\{color:#aeb6c6\}/);
@@ -898,6 +900,19 @@ test("chrome falls back to the OLED mark favicon when the artifact has none", ()
   assert.match(html, /<link rel="icon" href="data:image\/svg\+xml,/);
   assert.match(html, /stroke='%23787878'/);
   assert.match(html, /fill='white'/);
+});
+
+test("chrome declares vendored Archivo and IBM Plex Mono faces", async () => {
+  const css = await chromeCssSource();
+
+  assert.match(css, /@font-face\{font-family:"Archivo";[^}]*font-stretch:62% 125%/);
+  assert.match(css, /url\("\/fonts\/archivo-latin-wdth-normal\.woff2"\)/);
+  assert.match(css, /url\("\/fonts\/archivo-latin-ext-wdth-normal\.woff2"\)/);
+  assert.match(css, /@font-face\{font-family:"IBM Plex Mono";[^}]*font-weight:400/);
+  assert.match(css, /url\("\/fonts\/ibm-plex-mono-latin-400-normal\.woff2"\)/);
+  assert.match(css, /url\("\/fonts\/ibm-plex-mono-latin-500-normal\.woff2"\)/);
+  assert.match(css, /url\("\/fonts\/ibm-plex-mono-latin-600-normal\.woff2"\)/);
+  assert.doesNotMatch(css, /fonts\.googleapis\.com/);
 });
 
 test("overflow menu shows the artifact path with a copy affordance", async () => {
@@ -3380,6 +3395,35 @@ test("/chrome.css serves the extracted chrome stylesheet", async () => {
       normalizeCssForAssertions(body),
       /\.layout\{[^}]*grid-template-columns:minmax\(0,1fr\) ?var\(--panel-w\)/,
     );
+  } finally {
+    await server.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("/fonts/:file serves the vendored chrome type and 404s anything else", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-"));
+  const server = await serve({ port: 0, stateFile: path.join(dir, "state.json"), version: "9.9.9-test" });
+  try {
+    for (const file of [
+      "archivo-latin-wdth-normal.woff2",
+      "archivo-latin-ext-wdth-normal.woff2",
+      "ibm-plex-mono-latin-400-normal.woff2",
+      "ibm-plex-mono-latin-500-normal.woff2",
+      "ibm-plex-mono-latin-600-normal.woff2",
+    ]) {
+      const res = await fetch(`http://127.0.0.1:${server.port}/fonts/${file}`);
+      const bytes = Buffer.from(await res.arrayBuffer());
+
+      assert.equal(res.status, 200, file);
+      assert.match(res.headers.get("content-type") || "", /font\/woff2/, file);
+      // woff2 magic: 'wOF2'.
+      assert.equal(bytes.subarray(0, 4).toString("ascii"), "wOF2", file);
+      assert.ok(bytes.length > 10_000, `${file} is not an empty stub`);
+    }
+
+    const missing = await fetch(`http://127.0.0.1:${server.port}/fonts/not-a-font.woff2`);
+    assert.equal(missing.status, 404);
   } finally {
     await server.close();
     await rm(dir, { recursive: true, force: true });

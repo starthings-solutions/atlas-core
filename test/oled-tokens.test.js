@@ -49,7 +49,7 @@ test("OLED categorical and application palettes stay in separate namespaces", ()
   });
   // No value may appear in both namespaces: a shared hex would let a UI
   // state color pass as a data series (or the reverse) unnoticed.
-  const categorical = new Set(Object.values(OLED_CATEGORICAL));
+  const categorical = new Set(/** @type {string[]} */ (Object.values(OLED_CATEGORICAL)));
   for (const value of Object.values(OLED_APP)) {
     assert.ok(!categorical.has(value), `${value} must belong to exactly one namespace`);
   }

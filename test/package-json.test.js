@@ -71,6 +71,33 @@ test("build copies local design assets for published artifact injection", async 
   assert.match(buildScript, /tailwindcss-browser\.js/);
 });
 
+test("build vendors the chrome font files shipped in dist", async () => {
+  for (const asset of [
+    "archivo-latin-wdth-normal.woff2",
+    "archivo-latin-ext-wdth-normal.woff2",
+    "ibm-plex-mono-latin-400-normal.woff2",
+    "ibm-plex-mono-latin-500-normal.woff2",
+    "ibm-plex-mono-latin-600-normal.woff2",
+  ]) {
+    let data;
+    try {
+      data = await readFile(new URL(`../dist/fonts/${asset}`, import.meta.url));
+    } catch (error) {
+      // An unbuilt tree has no dist yet; `pnpm run check` and the installer always build first.
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+    assert.ok(data.byteLength > 10_000, asset);
+  }
+});
+
+test("chrome type resolves from vendored fontsource packages", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+
+  assert.ok(packageJson.dependencies["@fontsource-variable/archivo"]);
+  assert.ok(packageJson.dependencies["@fontsource/ibm-plex-mono"]);
+});
+
 test("package identity belongs to the private Atlas Core source distribution", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 

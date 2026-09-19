@@ -100,6 +100,25 @@ const designAssetUrls = {
   },
 };
 
+// Chrome type: the exact allowlist scripts/build.js vendors into dist/fonts.
+// Only these filenames resolve; anything else is a 404, never a path walk.
+const fontAssetSources = {
+  "archivo-latin-wdth-normal.woff2": "@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2",
+  "archivo-latin-ext-wdth-normal.woff2": "@fontsource-variable/archivo/files/archivo-latin-ext-wdth-normal.woff2",
+  "ibm-plex-mono-latin-400-normal.woff2": "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2",
+  "ibm-plex-mono-latin-500-normal.woff2": "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2",
+  "ibm-plex-mono-latin-600-normal.woff2": "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2",
+};
+const fontAssetUrls = Object.fromEntries(
+  Object.entries(fontAssetSources).map(([file, source]) => [
+    file,
+    {
+      packaged: new URL(`./fonts/${file}`, import.meta.url),
+      source: new URL(`../node_modules/${source}`, import.meta.url),
+    },
+  ]),
+);
+
 const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60_000;
 const WHITEBOARD_CHANNEL_TOKEN_TTL_MS = 5 * 60_000;
 const NETWORK_RECONCILE_CACHE_MS = 1_000;
@@ -1320,6 +1339,19 @@ export async function serve({
     }
   });
 
+  app.get("/fonts/:file", async (req, res, next) => {
+    try {
+      const asset = fontAssetUrls[req.params.file];
+      if (!asset) {
+        res.status(404).send("Not found");
+        return;
+      }
+      res.type("font/woff2").send(await readFontAsset(asset));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get("/sdk.js", async (req, res, next) => {
     try {
       const verified = await store.verifyArtifactLoad(
@@ -1939,6 +1971,15 @@ async function readDesignAsset(asset) {
   } catch (error) {
     if (error && error.code !== "ENOENT") throw error;
     return readFile(asset.source, "utf8");
+  }
+}
+
+async function readFontAsset(asset) {
+  try {
+    return await readFile(asset.packaged);
+  } catch (error) {
+    if (error && error.code !== "ENOENT") throw error;
+    return readFile(asset.source);
   }
 }
 

@@ -62,6 +62,15 @@ The Xiaolai family (CJK glyphs) is intentionally not vendored; Excalidraw falls 
 Font license attributions above were compiled from each family's upstream project.
 Before any npm publication that changes the vendored font set, re-verify each family's license file upstream (the `@excalidraw/excalidraw` npm package does not ship per-font license files).
 
+## Fonts vendored into `dist/fonts/` (from fontsource packages)
+
+| Package                        | Files                                            | License | Copyright                                  |
+| ------------------------------ | ------------------------------------------------ | ------- | ------------------------------------------ |
+| `@fontsource-variable/archivo` | `archivo-latin{,-ext}-wdth-normal.woff2`         | OFL-1.1 | The Archivo Project Authors (Omnibus-Type) |
+| `@fontsource/ibm-plex-mono`    | `ibm-plex-mono-latin-{400,500,600}-normal.woff2` | OFL-1.1 | Copyright 2017 IBM Corp.                   |
+
+The SIL Open Font License 1.1 text ships in each package's `LICENSE` file.
+
 ## Project provenance
 
 Atlas Core is derived from the upstream [`kunchenguid/lavish-axi`](https://github.com/kunchenguid/lavish-axi) project (Lavish). Its original MIT license and copyright notices remain in `LICENSE` and the repository history.
