@@ -1,14 +1,13 @@
 import { cp, mkdir, readFile, rename, rm } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const crossSpawn = createRequire(import.meta.url)("cross-spawn");
-
 export const DEFAULT_PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 /** @typedef {{ status: number | null, error?: Error }} LocalCommandResult */
+/** @typedef {(command: string, args: string[], options: import("node:child_process").SpawnSyncOptions) => LocalCommandResult} LocalSpawnSync */
 
 export function localInstallSteps(_platform = process.platform) {
   return [
@@ -33,10 +32,14 @@ export function localSkillTargets(home = os.homedir()) {
  * @param {string} command
  * @param {string[]} args
  * @param {import("node:child_process").SpawnSyncOptions} options
+ * @param {{ platform?: NodeJS.Platform, spawn?: LocalSpawnSync }} [runtime]
  * @returns {LocalCommandResult}
  */
-function runCommand(command, args, options) {
-  const result = crossSpawn.sync(command, args, options);
+export function runLocalCommand(command, args, options, { platform = process.platform, spawn = spawnSync } = {}) {
+  const result = spawn(command, args, {
+    ...options,
+    ...(platform === "win32" ? { shell: true } : {}),
+  });
   return {
     status: result.status,
     ...(result.error ? { error: result.error } : {}),
@@ -56,7 +59,7 @@ export async function installLocal({
   projectRoot = DEFAULT_PROJECT_ROOT,
   home = os.homedir(),
   platform = process.platform,
-  run = runCommand,
+  run = runLocalCommand,
   log = console.log,
 } = {}) {
   const skillSource = path.join(projectRoot, "skills", "atlas-core");

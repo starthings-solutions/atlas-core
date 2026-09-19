@@ -5,13 +5,38 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { installLocal, localInstallSteps } from "../src/local-install.js";
+import { installLocal, localInstallSteps, runLocalCommand } from "../src/local-install.js";
 
 test("local install uses portable package-manager commands on Windows", () => {
   assert.deepEqual(
     localInstallSteps("win32").map(({ command }) => command),
     ["pnpm", "pnpm", "npm"],
   );
+});
+
+test("local install asks the Windows command shell to resolve package-manager shims", () => {
+  const calls = [];
+  const result = runLocalCommand(
+    "pnpm",
+    ["install", "--frozen-lockfile"],
+    { cwd: "C:\\atlas-core", stdio: "inherit" },
+    {
+      platform: "win32",
+      spawn(command, args, options) {
+        calls.push({ command, args, options });
+        return { status: 0 };
+      },
+    },
+  );
+
+  assert.deepEqual(result, { status: 0 });
+  assert.deepEqual(calls, [
+    {
+      command: "pnpm",
+      args: ["install", "--frozen-lockfile"],
+      options: { cwd: "C:\\atlas-core", stdio: "inherit", shell: true },
+    },
+  ]);
 });
 
 test("local install builds this clone and installs Atlas Core for the machine, Codex, and Muse", async () => {
