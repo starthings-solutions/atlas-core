@@ -398,7 +398,8 @@ test("design output prints copy-pasteable CDN URLs so agents can opt in to Daisy
   assert.equal("opt_out" in output.design, false);
   assert.equal("rule" in output.design, false);
   assert.equal(output.design.latest_docs, "https://daisyui.com/components/");
-  assert.equal(output.themes.length, 35);
+  assert.equal(output.themes.length, 36);
+  assert.equal(output.themes[0], "atlas-core-oled");
   assert.ok(output.themes.includes("luxury"));
   assert.ok(output.themes.includes("silk"));
   assert.ok(output.components.actions.includes("button"));
@@ -412,12 +413,31 @@ test("design output prints copy-pasteable CDN URLs so agents can opt in to Daisy
   assert.ok(output.reference.mockup.notes.some((item) => item.includes("line numbers")));
 });
 
-test("design output recommends luxury as the default theme and warns against @apply on DaisyUI classes", () => {
+test("design output recommends atlas-core-oled as the default theme and warns against @apply on DaisyUI classes", () => {
   const output = createDesignOutput();
 
-  assert.ok(output.theme_usage.some((item) => /default.*luxury|luxury.*default/i.test(item)));
+  assert.ok(output.theme_usage.some((item) => /default.*atlas-core-oled|atlas-core-oled.*default/i.test(item)));
+  assert.ok(!output.theme_usage.some((item) => /default.*luxury|luxury.*default/i.test(item)));
   assert.ok(output.theme_usage.some((item) => item.includes("@apply") && /daisyui/i.test(item)));
   assert.ok(output.theme_usage.some((item) => /aborts the entire|no Tailwind styles/i.test(item)));
+  assert.ok(
+    output.theme_usage.some((item) => /--c1.*--c3.*--c4.*--c5|--c3.*--c4.*--c5/.test(item)),
+    "theme usage teaches the categorical series order",
+  );
+});
+
+test("design output carries the OLED head snippet, theme, and categorical contract", () => {
+  const output = createDesignOutput();
+
+  assert.equal(output.oled.theme_name, "atlas-core-oled");
+  assert.match(output.oled.head_snippet, /fonts\.googleapis\.com/);
+  assert.match(output.oled.head_snippet, /\[data-theme="atlas-core-oled"\]/);
+  assert.ok(output.oled.head_snippet.indexOf("fonts.gstatic.com") < output.oled.head_snippet.indexOf("<style>"));
+  assert.deepEqual(output.oled.categorical_order, ["c1", "c3", "c4", "c5"]);
+  assert.equal(output.oled.categorical_slots.c1, "#ffffff");
+  assert.equal(output.oled.categorical_slots.c2, "#f5451b");
+  assert.match(output.oled.categorical_rule, /--c2.*risk|risk.*--c2/);
+  assert.match(output.design.summary, /OLED head snippet/);
 });
 
 test("playbook index output lists known playbooks with concise descriptions", () => {
