@@ -81,6 +81,9 @@ async function createChromeHarness({
   // chrome's sheet breakpoint, with `setMobile` flipping it the way a resize would. Left off, the
   // window has no matchMedia at all, which is the desktop the other tests run against.
   mobile = false,
+  // Opt-in matchMedia override. Used to model an explicit OS color-scheme answer without
+  // changing the phone/desktop layout viewport behavior owned by `mobile`.
+  matchMediaImpl = null,
 } = {}) {
   const source = await readFile(sourceUrl, "utf8");
   // Seed sessionStorage before the client boots, to model a tab whose queue was
@@ -436,6 +439,9 @@ async function createChromeHarness({
     },
   };
   const mediaQueries = [];
+  if (typeof matchMediaImpl === "function") {
+    context.window.matchMedia = matchMediaImpl;
+  }
   if (mobile) {
     context.window.matchMedia = (query) => {
       const list = {
@@ -6131,6 +6137,17 @@ test("a window outside the artifact frame cannot open a whiteboard channel or qu
 
   assert.deepEqual(calls, []);
   assert.deepEqual(chrome.queued(), []);
+});
+
+test("OLED chrome initializes a light-OS whiteboard in dark mode", async () => {
+  const chrome = await createChromeHarness({
+    fetchImpl: async (url) => whiteboardFetch(url),
+    matchMediaImpl: () => ({ matches: false }),
+  });
+  const inline = await initializeInlineWhiteboard(chrome);
+  const init = inline.posted.at(-1);
+  assert.equal(init.type, "atlas-whiteboard:init");
+  assert.equal(init.theme, "dark");
 });
 
 test("whiteboard fullscreen waits for the authenticated inline frame to flush", async () => {

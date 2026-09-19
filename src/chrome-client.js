@@ -3064,7 +3064,9 @@ const whiteboardSaveChains = new Map();
 const inlineWhiteboardChannels = new Map();
 
 function whiteboardTheme() {
-  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  // The Atlas Core chrome is always OLED dark, so the whiteboard matches the
+  // viewer rather than the OS color scheme.
+  return "dark";
 }
 
 function postToWhiteboardOverlay(message) {
