@@ -1794,8 +1794,7 @@ export async function serve({
     lastBindError = error;
     if (isAddressAbsentBindError(error)) absentRequestedHosts.push(listenHost);
     if (listenHost === tailscale?.ipv4) {
-      networkWarning =
-        "Tailscale binding failed; there is no phone access. Atlas Core remains available on loopback.";
+      networkWarning = "Tailscale binding failed; there is no phone access. Atlas Core remains available on loopback.";
       writeLog(`[atlas] WARNING: ${networkWarning} Address: ${listenHost}:${boundPort}.`);
     } else {
       logEvent?.(`failed to bind ${listenHost}:${boundPort}: ${error.message}`);
