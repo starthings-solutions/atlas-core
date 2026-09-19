@@ -1,27 +1,52 @@
 :root {
-  --ink-900: #0f1115;
-  --ink-800: #11141a;
-  --ink-700: #171a21;
-  --ink-600: #1c212b;
-  --steel-700: #2a2f3a;
-  --steel-600: #303745;
-  --steel-500: #3c4557;
-  --steel-400: #8c96aa;
-  --steel-300: #aeb6c6;
-  --steel-200: #b9c0cf;
-  --steel-100: #d8deea;
-  --cream-50: #fffbf3;
-  --cream-100: #f7f3ea;
-  --cream-200: #e8e1cf;
-  --brass-500: #f4c95d;
-  --brass-400: #ffd877;
-  --brass-ink: #17130a;
-  --sage-900: #172419;
-  --sage-700: #315f3a;
-  --sage-300: #8fe39e;
-  --amber-900: #25230f;
-  --amber-700: #5d4d1b;
-  --rust-500: #f06464;
+  /* Atlas Core OLED contract (mirrors src/oled-tokens.js): void-black canvas, 1px wires,
+     2-3px radii, Archivo + IBM Plex Mono, Sunset Calm UI states. The categorical data
+     slots ride along for reference but never back a component state. */
+  --void: #000000;
+  --surface: #080808;
+  --surface-2: #101010;
+  --rule: #1b1b1b;
+  --dim: #2a2a2a;
+  --rule-2: #2e2e2e;
+  --ink-3: #787878;
+  --ink-2: #a3a3a3;
+  --ink: #ffffff;
+  --hollow: #6a6a6a;
+  --c1: #ffffff;
+  --c2: #f5451b;
+  --c3: #0091c8;
+  --c4: #00a06b;
+  --c5: #9463ff;
+  --app-ink: #f8f4eb;
+  --app-feedback: #ffb386;
+  --app-risk: #f87171;
+  --app-pending: #f2c14e;
+  --app-activity: #6fc7c2;
+  --veil: rgb(0 0 0 / 0.72);
+  /* Legacy aliases, remapped onto the OLED ramp so every existing component keeps working. */
+  --ink-900: var(--void);
+  --ink-800: var(--surface);
+  --ink-700: var(--void);
+  --ink-600: var(--surface-2);
+  --steel-700: var(--rule);
+  --steel-600: var(--rule-2);
+  --steel-500: var(--ink-3);
+  --steel-400: var(--ink-3);
+  --steel-300: var(--ink-3);
+  --steel-200: var(--ink-2);
+  --steel-100: var(--ink-2);
+  --cream-50: var(--app-ink);
+  --cream-100: var(--app-ink);
+  --cream-200: var(--app-ink);
+  --brass-500: var(--app-activity);
+  --brass-400: var(--app-activity);
+  --brass-ink: var(--void);
+  --sage-900: var(--surface-2);
+  --sage-700: var(--rule-2);
+  --sage-300: var(--app-activity);
+  --amber-900: transparent;
+  --amber-700: var(--app-pending);
+  --rust-500: var(--app-risk);
   --bg: var(--ink-900);
   --bg-panel: var(--ink-800);
   --bg-bar: var(--ink-700);
@@ -38,9 +63,8 @@
   --accent-hover: var(--brass-400);
   --accent-ink: var(--brass-ink);
   --danger: var(--rust-500);
-  --font-serif: "EB Garamond", "Iowan Old Style", Georgia, serif;
-  --font-sans: Geist, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: "Archivo", ui-sans-serif, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --text-xs: 12px;
   --lh-xs: 1.35;
   --text-sm: 13px;
@@ -86,15 +110,17 @@
   --space-20: 40px;
   --space-24: 48px;
   --space-32: 64px;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-xl: 14px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 3px;
+  --radius-xl: 3px;
   --radius-pill: 999px;
   --hairline: 1px solid var(--border);
   --hairline-subtle: 1px solid var(--border-subtle);
-  --shadow-tooltip: 0 16px 44px rgba(0, 0, 0, 0.35);
-  --shadow-floating: 0 20px 70px rgba(0, 0, 0, 0.35);
+  /* OLED carries no shadows: separation is always a wire. The declarations stay so every
+     floating surface keeps its hook; they resolve to nothing. */
+  --shadow-tooltip: none;
+  --shadow-floating: none;
   --bar-h: 56px;
   --bar-pad: var(--space-8);
   --panel-w: 360px;
@@ -103,7 +129,7 @@
   --dur: 180ms;
   --dur-slow: 320ms;
   --annotate-outline: 2px solid var(--accent);
-  --annotate-offset: 2px;
+  --annotate-offset: 3px;
 }
 * {
   box-sizing: border-box;
@@ -126,6 +152,10 @@ body {
 }
 body.atlas {
   color-scheme: dark;
+}
+::selection {
+  background: var(--app-activity);
+  color: var(--void);
 }
 :focus-visible {
   outline: var(--annotate-outline);
@@ -150,21 +180,23 @@ body.atlas {
   flex-shrink: 0;
 }
 .brand-mark {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-size: 22px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
   color: var(--fg);
 }
+.brand-mark svg {
+  display: block;
+}
 .brand-support {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--fg-muted);
   position: relative;
-  top: 1px;
+  top: 0;
 }
 .spacer {
   flex: 1;
@@ -186,12 +218,18 @@ body.atlas {
 }
 .annotate-switch:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  color: var(--hollow);
+}
+.annotate-switch:disabled .switch-track {
+  background: var(--dim);
+}
+.annotate-switch:disabled .switch-knob {
+  background: var(--hollow);
 }
 .switch-track {
   width: 34px;
   height: 20px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: var(--border);
   position: relative;
   flex-shrink: 0;
@@ -203,7 +241,7 @@ body.atlas {
   left: 2px;
   width: 16px;
   height: 16px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: var(--fg-faint);
   transition:
     left 150ms var(--ease),
@@ -215,6 +253,56 @@ body.atlas {
 .annotate-switch[aria-pressed="true"] .switch-knob {
   left: 16px;
   background: var(--accent-ink);
+}
+/* Desktop conversation toggle: the wire button that opens the side panel the chrome boots
+   without. The unread dot is the only circle on the bar; screen readers get the same state
+   through the button's label. Hidden on phone widths, where the dock owns the conversation. */
+.conversation-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.conversation-toggle:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+.conversation-toggle[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.conversation-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.conversation-icon svg {
+  display: block;
+}
+.unread-dot {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.unread-dot[hidden] {
+  display: none;
 }
 .visually-hidden {
   position: absolute;
@@ -244,10 +332,10 @@ body.atlas {
   gap: 6px;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid rgba(244, 201, 93, 0.35);
-  border-radius: 9px;
-  background: rgba(37, 35, 15, 0.72);
-  color: var(--brass-400);
+  border: 1px solid rgb(242 193 78 / 0.35);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--app-pending);
   font-family: inherit;
   font-size: var(--text-sm);
   font-weight: var(--w-bold);
@@ -256,13 +344,14 @@ body.atlas {
 }
 .warnings-button:hover:not(:disabled),
 .warnings-button[aria-expanded="true"] {
-  border-color: rgba(244, 201, 93, 0.6);
-  background: rgba(93, 77, 27, 0.5);
-  color: var(--accent-hover);
+  border-color: var(--app-pending);
+  background: transparent;
+  color: var(--app-pending);
 }
 .warnings-button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  color: var(--hollow);
+  border-color: var(--rule-2);
 }
 .warnings-count {
   min-width: 18px;
@@ -271,9 +360,9 @@ body.atlas {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: var(--accent-ink);
+  border-radius: var(--radius-sm);
+  background: var(--app-pending);
+  color: var(--void);
   font-size: 11px;
   font-weight: var(--w-bold);
   line-height: 1;
@@ -293,9 +382,9 @@ body.atlas {
 }
 .warnings-title {
   margin: 0;
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: var(--text-md);
-  font-weight: var(--w-regular);
+  font-weight: var(--w-semi);
   color: var(--fg);
 }
 .warnings-summary {
@@ -364,6 +453,7 @@ body.atlas {
 }
 .warning-row.is-outstanding {
   background: var(--ink-700);
+  box-shadow: inset 2px 0 0 var(--app-pending);
 }
 .warning-select {
   width: 14px;
@@ -374,7 +464,7 @@ body.atlas {
 }
 .warning-select:disabled {
   cursor: not-allowed;
-  opacity: 0.4;
+  accent-color: var(--hollow);
 }
 .warning-body {
   min-width: 0;
@@ -404,7 +494,7 @@ body.atlas {
   display: inline-flex;
   align-items: center;
   padding: 2px 6px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
   background: var(--ink-800);
   color: var(--fg-faint);
@@ -413,17 +503,17 @@ body.atlas {
   white-space: nowrap;
 }
 .warning-chip.severity {
-  border-color: rgba(240, 100, 100, 0.4);
+  border-color: rgb(248 113 113 / 0.4);
   color: var(--danger);
 }
 .warning-chip.status-queued,
 .warning-chip.status-unverified {
-  border-color: rgba(244, 201, 93, 0.4);
-  color: var(--accent);
+  border-color: rgb(242 193 78 / 0.4);
+  color: var(--app-pending);
 }
 .warning-chip.status-recurring,
 .warning-chip.status-reopened {
-  border-color: rgba(240, 100, 100, 0.4);
+  border-color: rgb(248 113 113 / 0.4);
   color: var(--danger);
 }
 .warning-target {
@@ -460,7 +550,8 @@ body.atlas {
 }
 .warning-action:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  color: var(--hollow);
+  border-color: var(--rule);
 }
 .warnings-foot {
   border-top: var(--hairline-subtle);
@@ -494,7 +585,7 @@ body.atlas {
   border: 1px solid var(--border-subtle);
   background: transparent;
   color: var(--fg-dim);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   padding: 0;
 }
@@ -506,7 +597,8 @@ body.atlas {
 }
 .more-button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  color: var(--hollow);
+  border-color: var(--rule);
 }
 .menu {
   position: absolute;
@@ -529,8 +621,9 @@ body.atlas {
   padding: 7px 10px 9px;
 }
 .menu-label {
-  font-size: 9px;
-  font-weight: var(--w-bold);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--w-medium);
   letter-spacing: var(--track-label);
   text-transform: uppercase;
   color: var(--fg-faint);
@@ -541,12 +634,12 @@ body.atlas {
   align-items: center;
   gap: 7px;
   width: calc(100% + 8px);
+  border-radius: var(--radius-sm);
   text-align: left;
   border: 0;
   background: transparent;
   padding: 3px 4px;
   margin: 0 -4px;
-  border-radius: 7px;
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -556,7 +649,7 @@ body.atlas {
   background: var(--steel-700);
 }
 .menu-file > svg {
-  opacity: 0.7;
+  color: var(--ink-3);
   flex-shrink: 0;
 }
 .menu-file-text {
@@ -629,27 +722,27 @@ body.atlas {
 }
 .menu-item:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  color: var(--hollow);
 }
 .menu-item > svg {
-  opacity: 0.8;
+  color: var(--ink-3);
   flex-shrink: 0;
 }
 .menu-item.danger {
   color: var(--danger);
 }
 .menu-item.danger > svg {
-  opacity: 1;
+  color: inherit;
 }
 .menu-item.danger:hover:not(:disabled) {
-  background: rgba(240, 100, 100, 0.1);
+  background: var(--surface-2);
 }
 .button {
   border: 0;
   border-radius: var(--radius-md);
   padding: 9px 14px;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--app-ink);
+  color: var(--void);
   font-family: inherit;
   font-size: var(--text-sm);
   font-weight: var(--w-bold);
@@ -658,17 +751,18 @@ body.atlas {
   transition:
     background 120ms ease-out,
     color 120ms ease-out,
-    opacity 120ms ease-out,
+    box-shadow 120ms ease-out,
     border-color 120ms ease-out;
 }
 .button:hover:not(:disabled) {
-  background: var(--accent-hover);
+  box-shadow: inset 0 0 0 1px var(--void);
 }
 .button:active:not(:disabled) {
-  opacity: 0.85;
+  box-shadow: inset 0 0 0 2px var(--void);
 }
 .button:disabled {
-  opacity: 0.55;
+  background: var(--rule-2);
+  color: var(--ink-3);
   cursor: not-allowed;
 }
 .button-danger {
@@ -679,7 +773,11 @@ body.atlas {
   color: var(--danger);
 }
 .button-danger:hover:not(:disabled) {
-  background: rgba(240, 100, 100, 0.1);
+  background: var(--surface-2);
+}
+.button-danger:disabled {
+  background: transparent;
+  color: var(--hollow);
 }
 .button-danger > svg {
   flex-shrink: 0;
@@ -691,7 +789,7 @@ body.atlas {
   display: grid;
   place-items: center;
   padding: var(--space-16);
-  background: rgba(15, 17, 21, 0.72);
+  background: var(--veil);
 }
 .share-overlay[hidden] {
   display: none;
@@ -733,10 +831,9 @@ body.atlas {
 }
 .share-head h2 {
   margin: var(--space-2) 0 0;
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: var(--text-2xl);
-  font-style: italic;
-  font-weight: var(--w-regular);
+  font-weight: var(--w-semi);
   line-height: var(--lh-2xl);
 }
 .share-close {
@@ -746,7 +843,7 @@ body.atlas {
   width: 30px;
   height: 30px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg-muted);
   cursor: pointer;
@@ -789,9 +886,9 @@ body.atlas {
 .share-result input {
   min-width: 0;
   width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--ink-3);
   border-radius: var(--radius-lg);
-  background: var(--bg);
+  background: var(--surface-2);
   color: var(--fg);
   font: inherit;
   font-size: var(--text-base);
@@ -911,6 +1008,19 @@ body.atlas {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+}
+/* Desktop conversation collapse: the chrome boots with the panel closed so the artifact owns
+   the viewport, and the bar toggle reopens it side-by-side. Collapsing removes the grid track
+   itself - never an empty column - and display:none keeps the hidden panel out of the focus
+   order without touching messages, drafts, attachments, or annotations. Scoped strictly above
+   the phone breakpoint so the bottom-sheet controller owns narrower viewports alone. */
+@media (min-width: 861px) {
+  body.panel-collapsed .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body.panel-collapsed .panel {
+    display: none;
+  }
 }
 /* Desktop keeps the panel's original flex children: the head wrappers exist only so the phone
    layout can turn the heading into a dock, and they are transparent to layout everywhere else. */
@@ -1054,14 +1164,15 @@ body.atlas {
   width: 18px;
   height: 18px;
   border: 0;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   padding: 0;
   background: var(--border);
   color: var(--fg-muted);
   cursor: pointer;
 }
 .queued-remove:disabled {
-  opacity: 0.55;
+  color: var(--hollow);
+  background: var(--rule);
   cursor: not-allowed;
 }
 .queued-remove svg {
@@ -1094,10 +1205,10 @@ body.atlas {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* A selected range keeps the artifact's own highlight: brass means attention is here. */
+/* A selected range keeps the artifact's own highlight: activity means attention is here. */
 .anchor-excerpt.text {
-  background: rgba(244, 201, 93, 0.22);
-  box-shadow: 0 0 0 1px rgba(244, 201, 93, 0.35);
+  background: rgb(111 199 194 / 0.22);
+  box-shadow: 0 0 0 1px rgb(111 199 194 / 0.35);
   color: var(--fg);
   border-radius: 3px;
   padding: 0 3px;
@@ -1269,8 +1380,8 @@ body.atlas {
   min-height: 82px;
   resize: vertical;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  background: var(--bg);
+  border: 1px solid var(--ink-3);
+  background: var(--surface-2);
   color: var(--fg);
   padding: 10px;
   font: inherit;
@@ -1309,7 +1420,7 @@ body.atlas {
   width: 32px;
   height: 32px;
   flex: 0 0 auto;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   object-fit: cover;
 }
 .chat-attachment-copy {
@@ -1334,10 +1445,14 @@ body.atlas {
 .chat-attach {
   border: 0;
   background: transparent;
-  color: var(--accent);
+  color: var(--ink-2);
   cursor: pointer;
   font: inherit;
   padding: 2px 4px;
+}
+.chat-attachment-chip button:hover,
+.chat-attach:hover {
+  color: var(--app-feedback);
 }
 .chat-attachment-toolbar {
   display: flex;
@@ -1366,10 +1481,10 @@ body.atlas {
 }
 .send-hint.persistent {
   padding: var(--space-4);
-  border: 1px solid var(--amber-700);
+  border: 1px solid var(--app-pending);
   border-radius: var(--radius-sm);
-  background: var(--amber-900);
-  color: var(--accent-hover);
+  background: transparent;
+  color: var(--app-pending);
 }
 .send-hint[hidden] {
   display: none;
@@ -1383,7 +1498,7 @@ body.atlas {
 .ended-overlay {
   position: fixed;
   inset: var(--bar-h) 0 0 0;
-  background: rgba(15, 17, 21, 0.86);
+  background: rgb(0 0 0 / 0.86);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1401,8 +1516,8 @@ body.atlas {
   text-align: center;
 }
 .ended-title {
-  font-family: var(--font-serif);
-  font-style: italic;
+  font-family: var(--font-sans);
+  font-weight: var(--w-semi);
   font-size: 22px;
   line-height: 1.3;
   color: var(--fg);
@@ -1533,7 +1648,7 @@ body.layout-gate-active iframe#artifact {
     width: 36px;
     height: 4px;
     margin: 0 auto 6px;
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-sm);
     background: var(--border-strong);
   }
   .panel-head-row {
@@ -1585,10 +1700,14 @@ body.layout-gate-active iframe#artifact {
     height: 32px;
     padding: 0;
     border: 1px solid var(--border);
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-sm);
     background: var(--bg-elevated);
     color: var(--fg-muted);
     cursor: pointer;
+  }
+  /* The bar toggle belongs to the desktop layout; the phone dock owns the conversation. */
+  .conversation-toggle {
+    display: none;
   }
   .panel-toggle svg {
     display: block;
@@ -1639,7 +1758,7 @@ body.layout-gate-active iframe#artifact {
     position: fixed;
     inset: var(--bar-h) 0 0 0;
     z-index: 29;
-    background: rgba(15, 17, 21, 0.72);
+    background: var(--veil);
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--dur-slow) var(--ease);
@@ -1684,10 +1803,10 @@ body.layout-gate-active iframe#artifact {
 }
 @keyframes dock-pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(244, 201, 93, 0.55);
+    box-shadow: 0 0 0 0 rgb(111 199 194 / 0.55);
   }
   100% {
-    box-shadow: 0 0 0 10px rgba(244, 201, 93, 0);
+    box-shadow: 0 0 0 10px rgb(111 199 194 / 0);
   }
 }
 
@@ -1698,7 +1817,7 @@ body.layout-gate-active iframe#artifact {
 .whiteboard-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 17, 21, 0.92);
+  background: rgb(0 0 0 / 0.92);
   z-index: 80;
   display: flex;
 }
@@ -1732,7 +1851,7 @@ body.layout-gate-active iframe#artifact {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   color: var(--fg-faint);
   cursor: pointer;

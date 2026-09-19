@@ -778,7 +778,7 @@ test("chrome top bar uses an Annotate switch instead of a labeled toggle button"
   assert.doesNotMatch(html, /Inspect/);
 });
 
-test("annotate switch shows a brass track and ink knob when enabled", async () => {
+test("annotate switch shows an activity track and void knob when enabled", async () => {
   const js = await chromeClientSource();
   const css = await chromeCssSource();
 
@@ -787,18 +787,31 @@ test("annotate switch shows a brass track and ink knob when enabled", async () =
   assert.match(js, /annotationSwitch\.setAttribute\("aria-pressed", String\(annotation\)\)/);
 });
 
-test("chrome declares the Atlas Core design-system tokens", async () => {
+test("chrome declares the Atlas Core OLED tokens", async () => {
   const css = await chromeCssSource();
 
-  assert.match(css, /--ink-900:#0f1115/);
-  assert.match(css, /--cream-100:#f7f3ea/);
-  assert.match(css, /--brass-500:#f4c95d/);
-  assert.match(css, /--font-serif:/);
-  assert.match(css, /--font-sans:/);
+  assert.match(css, /--void:#000000/);
+  assert.match(css, /--surface:#080808/);
+  assert.match(css, /--surface-2:#101010/);
+  assert.match(css, /--ink-3:#787878/);
+  assert.match(css, /--ink-2:#a3a3a3/);
+  assert.match(css, /--app-ink:#f8f4eb/);
+  assert.match(css, /--app-feedback:#ffb386/);
+  assert.match(css, /--app-risk:#f87171/);
+  assert.match(css, /--app-pending:#f2c14e/);
+  assert.match(css, /--app-activity:#6fc7c2/);
+  assert.match(css, /--ink-900:var\(--void\)/);
+  assert.match(css, /--brass-500:var\(--app-activity\)/);
+  assert.match(css, /--rust-500:var\(--app-risk\)/);
+  assert.match(css, /--font-sans:"Archivo"/);
+  assert.match(css, /--font-mono:"IBM Plex Mono"/);
+  assert.doesNotMatch(css, /--font-serif/);
+  assert.match(css, /--radius-sm:2px/);
+  assert.match(css, /--radius-xl:3px/);
   assert.match(css, /--text-display:92px/);
   assert.match(css, /--lh-display:1/);
   assert.match(css, /--space-32:64px/);
-  assert.match(css, /--shadow-floating:0 20px 70px rgba\(0,0,0,.35\)/);
+  assert.match(css, /--shadow-floating:none/);
   assert.match(css, /--ease:cubic-bezier\(.2,.6,.2,1\)/);
   assert.match(css, /--dur-slow:320ms/);
   assert.match(css, /--bar-h:56px/);
@@ -822,7 +835,7 @@ test("chrome uses the annotation outline as the keyboard focus outline", async (
 
   assert.match(css, /:focus-visible\{outline:var\(--annotate-outline\);outline-offset:var\(--annotate-offset\)/);
   assert.match(css, /--annotate-outline:2px solid var\(--accent\)/);
-  assert.match(css, /--annotate-offset:2px/);
+  assert.match(css, /--annotate-offset:3px/);
 });
 
 test("chrome page ships the phone conversation dock and the viewport contract it relies on", () => {
@@ -849,15 +862,42 @@ test("chrome top bar follows the design mock wordmark and overflow menu treatmen
   const html = createChromeHtml({ key: "abc", file: "/tmp/artifact.html" });
   const css = await chromeCssSource();
 
-  assert.match(html, /class="brand-mark">Atlas Core/);
-  assert.match(html, /class="brand-support">Editor/);
-  assert.match(css, /font-family:var\(--font-serif\)/);
-  assert.match(css, /letter-spacing:\.18em/);
+  assert.match(html, /class="brand-mark"><svg[^>]*viewBox='0 0 18 18'/);
+  assert.match(html, /class="brand-support">Atlas Core</);
+  assert.doesNotMatch(html, /brand-support">Editor/);
+  assert.doesNotMatch(css, /font-family:var\(--font-serif\)/);
+  assert.match(css, /letter-spacing:.18em/);
   assert.match(html, /class="more-button" id="moreButton"/);
   assert.match(html, /class="menu more-menu" id="moreMenu" hidden/);
   assert.doesNotMatch(html, /class="file-input"/);
   assert.doesNotMatch(html, /class="divider"/);
   assert.doesNotMatch(html, /class="file-icon"/);
+});
+
+test("chrome top bar carries the desktop conversation toggle with its unread dot", () => {
+  const html = createChromeHtml({ key: "abc", file: "/tmp/artifact.html" });
+
+  assert.match(
+    html,
+    /<button class="conversation-toggle" id="conversationToggle" type="button" aria-expanded="false" aria-controls="panel" aria-label="Show conversation">/,
+  );
+  assert.match(html, /<span class="unread-dot" id="conversationUnread" hidden><\/span>/);
+});
+
+test("desktop chrome collapses the conversation grid track instead of leaving a column", async () => {
+  const css = await chromeCssSource();
+
+  assert.match(css, /body\.panel-collapsed \.layout\{grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css, /body\.panel-collapsed \.panel\{display:none/);
+  assert.match(css, /\.conversation-toggle\{[^}]*display:inline-flex/);
+});
+
+test("chrome falls back to the OLED mark favicon when the artifact has none", () => {
+  const html = createChromeHtml({ key: "abc", file: "/tmp/artifact.html" });
+
+  assert.match(html, /<link rel="icon" href="data:image\/svg\+xml,/);
+  assert.match(html, /stroke='%23787878'/);
+  assert.match(html, /fill='white'/);
 });
 
 test("overflow menu shows the artifact path with a copy affordance", async () => {
@@ -1019,7 +1059,7 @@ test("chrome centers the top bar row while bottom-aligning the identity cluster"
   assert.match(css, /\.brand\{[^}]*align-items:flex-end/);
 });
 
-test("chrome chat bubbles follow the preview mock shades", async () => {
+test("chrome chat bubbles follow the OLED panel treatment", async () => {
   const css = await chromeCssSource();
 
   assert.match(css, /\.bubble\.user\{[^}]*background:var\(--bg-elevated\)/);
@@ -3335,7 +3375,7 @@ test("/chrome.css serves the extracted chrome stylesheet", async () => {
 
     assert.equal(res.status, 200);
     assert.match(res.headers.get("content-type") || "", /text\/css/);
-    assert.match(normalizeCssForAssertions(body), /--ink-900:#0f1115/);
+    assert.match(normalizeCssForAssertions(body), /--void:#000000/);
     assert.match(
       normalizeCssForAssertions(body),
       /\.layout\{[^}]*grid-template-columns:minmax\(0,1fr\) ?var\(--panel-w\)/,
@@ -6117,8 +6157,8 @@ test("ended session shows an overlay card over the dimmed chrome", async () => {
   assert.match(html, /class="ended-copy">\/tmp\/artifact\.html</);
   assert.doesNotMatch(html, /The agent polling loop can stop\./);
   assert.match(css, /\.ended-overlay\{[^}]*inset:var\(--bar-h\) 0 0 0/);
-  assert.match(css, /\.ended-overlay\{[^}]*background:rgba\(15,17,21,.86\)/);
-  assert.match(css, /\.ended-title\{[^}]*font-family:var\(--font-serif\)/);
+  assert.match(css, /\.ended-overlay\{[^}]*background:rgb\(0 0 0 \/ \.86\)/);
+  assert.match(css, /\.ended-title\{[^}]*font-family:var\(--font-sans\)/);
   assert.match(js, /endedOverlay\.hidden = false/);
   assert.match(js, /annotationSwitch\.disabled = true/);
   assert.match(js, /moreButton\.disabled = true/);

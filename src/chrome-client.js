@@ -119,6 +119,8 @@ const panelHead = /** @type {HTMLDivElement} */ (document.getElementById("panelH
 const panelSummary = /** @type {HTMLSpanElement} */ (document.getElementById("panelSummary"));
 const panelToggle = /** @type {HTMLButtonElement} */ (document.getElementById("panelToggle"));
 const panelScrim = /** @type {HTMLDivElement} */ (document.getElementById("panelScrim"));
+const conversationToggle = /** @type {HTMLButtonElement} */ (document.getElementById("conversationToggle"));
+const conversationUnread = /** @type {HTMLSpanElement} */ (document.getElementById("conversationUnread"));
 const sendButton = /** @type {HTMLButtonElement} */ (document.getElementById("send"));
 const sendAndEndButton = /** @type {HTMLButtonElement} */ (document.getElementById("sendAndEnd"));
 const annotationSwitch = /** @type {HTMLButtonElement} */ (document.getElementById("annotation"));
@@ -1221,10 +1223,16 @@ function pulseSheetDock() {
 }
 
 function noteAgentReply(text) {
-  if (!isMobileSheet() || sheetOpen) return;
+  if (isMobileSheet()) {
+    if (sheetOpen) return;
+    unreadAgentReply = String(text || "");
+    renderSheetSummary();
+    pulseSheetDock();
+    return;
+  }
+  if (panelOpen) return;
   unreadAgentReply = String(text || "");
-  renderSheetSummary();
-  pulseSheetDock();
+  noteDesktopReply();
 }
 
 // The phone keyboard shrinks the visual viewport without touching the layout viewport on iOS, so
@@ -1314,6 +1322,74 @@ if (window.visualViewport && typeof window.visualViewport.addEventListener === "
 }
 window.addEventListener("resize", syncVisualViewport);
 syncVisualViewport();
+
+// ---- Desktop conversation collapse ----
+// Above the phone breakpoint the panel starts closed so the artifact owns the viewport, and the
+// bar toggle reopens it side-by-side. This controller owns intent and accessibility state; CSS
+// owns the geometry (the grid track itself is removed, never an empty column). It shares the
+// sheet's matchMedia - no second query - and stays inert on phone widths, where the bottom
+// sheet owns the conversation. Opening is always explicit: an agent reply lights the unread
+// dot but never opens the panel, on either layout.
+const panelStorageKey = "atlas-core:panel-open:" + key;
+let panelOpen = readPanelOpen();
+
+function readPanelOpen() {
+  try {
+    return sessionStorage.getItem(panelStorageKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setPanelOpen(open, options = {}) {
+  const next = Boolean(open);
+  const changed = next !== panelOpen;
+  panelOpen = next;
+  try {
+    if (panelOpen) sessionStorage.setItem(panelStorageKey, "1");
+    else sessionStorage.removeItem(panelStorageKey);
+  } catch {
+    // Storage refused is not worth a broken panel: the state just stops surviving a reload.
+  }
+  if (panelOpen) unreadAgentReply = "";
+  applyPanelState();
+  if (!changed || isMobileSheet()) return;
+  if (panelOpen) {
+    scrollPanelToBottom();
+    chatInput.focus();
+  } else if (options.restoreFocus !== false) {
+    conversationToggle.focus();
+  }
+}
+
+function applyPanelState() {
+  const collapsed = !isMobileSheet() && !panelOpen;
+  document.body.classList.toggle("panel-collapsed", collapsed);
+  conversationToggle.setAttribute("aria-expanded", panelOpen ? "true" : "false");
+  const label = panelOpen
+    ? "Hide conversation"
+    : unreadAgentReply
+      ? "Show conversation, unread messages"
+      : "Show conversation";
+  conversationToggle.setAttribute("aria-label", label);
+  conversationUnread.hidden = !(!panelOpen && !isMobileSheet() && Boolean(unreadAgentReply));
+}
+
+function noteDesktopReply() {
+  if (isMobileSheet() || panelOpen) return;
+  applyPanelState();
+}
+
+conversationToggle.addEventListener("click", () => {
+  if (isMobileSheet()) return;
+  setPanelOpen(!panelOpen);
+});
+if (sheetMedia && typeof sheetMedia.addEventListener === "function") {
+  sheetMedia.addEventListener("change", () => {
+    applyPanelState();
+  });
+}
+applyPanelState();
 
 function scrollElementIntoView(el) {
   el.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -3960,6 +4036,8 @@ document.addEventListener("keydown", (event) => {
       closeMenus();
     } else if (sheetOpen && isMobileSheet()) {
       setSheetOpen(false);
+    } else if (panelOpen && !isMobileSheet() && panel.contains(document.activeElement)) {
+      setPanelOpen(false);
     } else {
       closeMenus();
     }

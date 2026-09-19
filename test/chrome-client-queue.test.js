@@ -7021,6 +7021,108 @@ test("the dock reports an ended session", async () => {
   assert.equal(sheetState(chrome).summary, "Session ended");
 });
 
+// ---- Desktop conversation collapse ----
+
+function panelState(chrome) {
+  const toggle = chrome.element("conversationToggle");
+  return {
+    collapsed: chrome.element("body").classList.contains("panel-collapsed"),
+    expanded: toggle["aria-expanded"],
+    label: toggle["aria-label"],
+    unreadHidden: Boolean(chrome.element("conversationUnread").hidden),
+    stored: chrome.storage.get("atlas-core:panel-open:abc") || null,
+  };
+}
+
+test("desktop chrome boots with the conversation collapsed and the toggle closed", async () => {
+  const chrome = await createChromeHarness();
+
+  const state = panelState(chrome);
+  assert.equal(state.collapsed, true);
+  assert.equal(state.expanded, "false");
+  assert.equal(state.label, "Show conversation");
+  assert.equal(state.unreadHidden, true);
+  assert.equal(state.stored, null);
+});
+
+test("desktop toggle opens the panel, focuses the composer, and closes back with focus returned", async () => {
+  const chrome = await createChromeHarness();
+
+  chrome.element("conversationToggle").dispatch("click", {});
+  let state = panelState(chrome);
+  assert.equal(state.collapsed, false);
+  assert.equal(state.expanded, "true");
+  assert.equal(state.label, "Hide conversation");
+  assert.equal(state.stored, "1");
+  assert.equal(chrome.focusLog.at(-1), "chatInput");
+
+  chrome.element("conversationToggle").dispatch("click", {});
+  state = panelState(chrome);
+  assert.equal(state.collapsed, true);
+  assert.equal(state.expanded, "false");
+  assert.equal(state.label, "Show conversation");
+  assert.equal(state.stored, null);
+  assert.equal(chrome.focusLog.at(-1), "conversationToggle");
+});
+
+test("desktop chrome restores an open panel across a chrome reload", async () => {
+  const storage = new Map([["atlas-core:panel-open:abc", "1"]]);
+  const chrome = await createChromeHarness({ storage });
+
+  const state = panelState(chrome);
+  assert.equal(state.collapsed, false);
+  assert.equal(state.expanded, "true");
+});
+
+test("an agent reply lights the desktop unread dot but never opens the panel", async () => {
+  const chrome = await createChromeHarness();
+
+  chrome.eventSource().listeners.get("agent-reply")({ data: JSON.stringify({ text: "Renamed the payment step." }) });
+  let state = panelState(chrome);
+  assert.equal(state.collapsed, true, "the reply must not force the panel open");
+  assert.equal(state.unreadHidden, false);
+  assert.equal(state.label, "Show conversation, unread messages");
+
+  chrome.element("conversationToggle").dispatch("click", {});
+  state = panelState(chrome);
+  assert.equal(state.collapsed, false);
+  assert.equal(state.unreadHidden, true);
+  assert.equal(state.label, "Hide conversation");
+
+  // A reply that arrives while the panel is up was seen, so closing previews nothing.
+  chrome.eventSource().listeners.get("agent-reply")({ data: JSON.stringify({ text: "Done." }) });
+  chrome.element("conversationToggle").dispatch("click", {});
+  state = panelState(chrome);
+  assert.equal(state.collapsed, true);
+  assert.equal(state.unreadHidden, true);
+  assert.equal(state.label, "Show conversation");
+});
+
+test("Escape closes the desktop panel only when focus is inside it", async () => {
+  const chrome = await createChromeHarness();
+
+  chrome.element("conversationToggle").dispatch("click", {});
+  assert.equal(panelState(chrome).collapsed, false);
+
+  // Focus outside the panel: Escape leaves the panel alone.
+  chrome.element("conversationToggle").focus();
+  chrome.dispatchDocumentKeydown({ key: "Escape" });
+  assert.equal(panelState(chrome).collapsed, false);
+
+  // Focus inside the panel: Escape closes it and returns focus to the toggle.
+  chrome.element("chatInput").focus();
+  chrome.dispatchDocumentKeydown({ key: "Escape" });
+  assert.equal(panelState(chrome).collapsed, true);
+  assert.equal(chrome.focusLog.at(-1), "conversationToggle");
+});
+
+test("phone chrome never applies the desktop collapsed state", async () => {
+  const chrome = await createChromeHarness({ mobile: true });
+
+  assert.equal(panelState(chrome).collapsed, false);
+  assert.equal(chrome.element("body").classList.contains("sheet-open"), false);
+});
+
 test("a swipe on the dock raises and lowers the sheet, and a tap after a swipe is not a second toggle", async () => {
   const chrome = await createChromeHarness({ mobile: true });
 
