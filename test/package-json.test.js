@@ -17,44 +17,47 @@ test("check script runs all verification commands", async () => {
   ]);
 });
 
-test("committed skill matches the generator stub", async () => {
+test("committed Atlas Core skill matches the generator stub", async () => {
   const { createSkillMarkdown } = await import("../src/skill.js");
-  const committed = await readFile(new URL("../skills/lavish/SKILL.md", import.meta.url), "utf8");
+  const committed = await readFile(new URL("../skills/atlas-core/SKILL.md", import.meta.url), "utf8");
 
   assert.equal(committed, createSkillMarkdown(), "run `npm run build:skill` and commit the result");
 });
 
-test("published package includes the installable skill", async () => {
+test("source distribution includes the installable skill", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-  assert.ok(packageJson.files.includes("skills/lavish"));
+  assert.ok(packageJson.files.includes("skills/atlas-core"));
 });
 
-test("published package root is a complete Agent Plugin", async () => {
-  // The tarball root doubles as the plugin root, so both the manifest and the skills it
-  // discovers have to ship; without either, an installed copy is not installable as a plugin.
+test("source distribution root is a complete Agent Plugin", async () => {
+  // The cloned repository doubles as the plugin root, so both the manifest and the skills it
+  // discovers must remain part of the local installation surface.
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
   assert.ok(packageJson.files.includes("plugin.json"));
-  assert.ok(packageJson.files.includes("skills/lavish"));
+  assert.ok(packageJson.files.includes("skills/atlas-core"));
 });
 
 test("release-please keeps the plugin manifest version in step with the package", async () => {
   const config = JSON.parse(await readFile(new URL("../release-please-config.json", import.meta.url), "utf8"));
 
+  assert.equal(config["bootstrap-sha"], "d62853166c21dde6f9e8a0ba19c8fe7f0d499545");
+  assert.equal(config.packages["."]["package-name"], "atlas-core");
+  assert.equal(config.packages["."].component, "atlas-core");
   assert.deepEqual(config.packages["."]["extra-files"], [{ type: "json", path: "plugin.json", jsonpath: "$.version" }]);
 });
 
-test("lavish-design agent skill is marked internal for skills CLI discovery", async () => {
-  const skillMd = await readFile(new URL("../.agents/skills/lavish-design/SKILL.md", import.meta.url), "utf8");
+test("atlas-design agent skill is marked internal for skills CLI discovery", async () => {
+  const skillMd = await readFile(new URL("../.agents/skills/atlas-design/SKILL.md", import.meta.url), "utf8");
   const frontmatter = skillMd.slice(4, skillMd.indexOf("\n---\n", 4));
 
-  assert.match(frontmatter, /^name: lavish-design$/m);
+  assert.match(frontmatter, /^name: atlas-design$/m);
   assert.match(frontmatter, /^metadata:\n {2}internal: true$/m);
 });
 
-test("public lavish skill is not marked internal", async () => {
-  const skillMd = await readFile(new URL("../skills/lavish/SKILL.md", import.meta.url), "utf8");
+test("public Atlas Core skill is not marked internal", async () => {
+  const skillMd = await readFile(new URL("../skills/atlas-core/SKILL.md", import.meta.url), "utf8");
   const frontmatter = skillMd.slice(4, skillMd.indexOf("\n---\n", 4));
 
   assert.doesNotMatch(frontmatter, /^metadata:\n {2}internal: true$/m);
@@ -68,12 +71,18 @@ test("build copies local design assets for published artifact injection", async 
   assert.match(buildScript, /tailwindcss-browser\.js/);
 });
 
-test("package metadata matches the GitHub repository used for npm provenance", async () => {
+test("package identity belongs to the private Atlas Core source distribution", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-  assert.equal(packageJson.repository.url, "git+https://github.com/kunchenguid/lavish-axi.git");
-  assert.equal(packageJson.bugs.url, "https://github.com/kunchenguid/lavish-axi/issues");
-  assert.equal(packageJson.homepage, "https://github.com/kunchenguid/lavish-axi#readme");
+  assert.equal(packageJson.name, "atlas-core");
+  assert.deepEqual(packageJson.bin, { "atlas-core": "dist/cli.mjs" });
+  assert.equal(packageJson.private, true);
+  assert.equal(packageJson.publishConfig, undefined);
+  assert.equal(packageJson.scripts.prepare, undefined);
+  assert.equal(packageJson.scripts["install:local"], "node scripts/install-local.js");
+  assert.equal(packageJson.repository.url, "git+https://github.com/starthings-solutions/atlas-core.git");
+  assert.equal(packageJson.bugs.url, "https://github.com/starthings-solutions/atlas-core/issues");
+  assert.equal(packageJson.homepage, "https://github.com/starthings-solutions/atlas-core#readme");
 });
 
 test("pnpm lock root importer matches the publish manifest", async () => {
@@ -97,11 +106,11 @@ test("release workflow publishes from the release tag checkout", async () => {
   );
 });
 
-test("release workflow keeps telemetry env during npm publish prepack", async () => {
+test("release workflow never publishes Atlas Core to npm", async () => {
   const workflow = await readFile(new URL("../.github/workflows/release-please.yml", import.meta.url), "utf8");
 
-  assert.match(
-    workflow,
-    /run: npm publish --access public --provenance\n\s+if: \$\{\{ steps\.release\.outputs\.release_created \}\}\n\s+env:\n\s+LAVISH_AXI_UMAMI_HOST: https:\/\/a\.kunchenguid\.com\n\s+LAVISH_AXI_UMAMI_WEBSITE_ID: \$\{\{ vars\.LAVISH_AXI_UMAMI_WEBSITE_ID \}\}/,
-  );
+  assert.doesNotMatch(workflow, /\bnpm publish\b/);
+  assert.doesNotMatch(workflow, /registry\.npmjs\.org/);
+  assert.doesNotMatch(workflow, /id-token:\s*write/);
+  assert.match(workflow, /issues:\s*write/);
 });

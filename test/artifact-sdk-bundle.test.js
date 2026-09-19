@@ -137,7 +137,7 @@ function bootSdk({ runAnimationFrames = false } = {}) {
     },
     URL: {
       createObjectURL() {
-        return "blob:lavish-test";
+        return "blob:atlas-test";
       },
       revokeObjectURL() {},
     },
@@ -182,7 +182,7 @@ function bootSdk({ runAnimationFrames = false } = {}) {
   return {
     posted,
     body,
-    api: sandbox.window.lavish,
+    api: sandbox.window.atlas,
     click(target) {
       const listener = documentListeners.find((entry) => entry.type === "click");
       assert.ok(listener, "the SDK registers a document click listener");
@@ -222,7 +222,7 @@ function bootSdk({ runAnimationFrames = false } = {}) {
     cards() {
       return documentElement.children
         .flatMap((child) => child.shadowRoot?.children || [])
-        .filter((child) => child.className === "lavish-annotation-card");
+        .filter((child) => child.className === "atlas-annotation-card");
     },
     card() {
       const card = this.cards().at(-1);
@@ -232,7 +232,7 @@ function bootSdk({ runAnimationFrames = false } = {}) {
     queue(text) {
       const card = this.card();
       card.querySelector("textarea").value = text;
-      card.querySelector(".lavish-send").onclick();
+      card.querySelector(".atlas-send").onclick();
       return posted.at(-1);
     },
   };
@@ -258,12 +258,12 @@ test("a requested layout diagnostic publishes even when the result is unchanged"
   const sdk = bootSdk({ runAnimationFrames: true });
 
   await sdk.runAllTimers();
-  const first = sdk.posted.filter((message) => message.type === "lavish:layoutDiagnostics");
+  const first = sdk.posted.filter((message) => message.type === "atlas:layoutDiagnostics");
   assert.equal(first.length, 1);
 
-  sdk.sendChromeMessage({ type: "lavish:requestLayoutDiagnostics" });
+  sdk.sendChromeMessage({ type: "atlas:requestLayoutDiagnostics" });
   await sdk.runAllTimers();
-  const diagnostics = sdk.posted.filter((message) => message.type === "lavish:layoutDiagnostics");
+  const diagnostics = sdk.posted.filter((message) => message.type === "atlas:layoutDiagnostics");
   assert.equal(diagnostics.length, 2);
   assert.equal(diagnostics[1].artifact_pass_sequence, diagnostics[0].artifact_pass_sequence + 1);
   assert.deepEqual(diagnostics[1].findings, diagnostics[0].findings);
@@ -272,10 +272,10 @@ test("a requested layout diagnostic publishes even when the result is unchanged"
 test("the served SDK echoes the snapshot request id", () => {
   const sdk = bootSdk();
 
-  sdk.sendChromeMessage({ type: "lavish:requestSnapshot", snapshot_request_id: "snapshot-17" });
+  sdk.sendChromeMessage({ type: "atlas:requestSnapshot", snapshot_request_id: "snapshot-17" });
 
   const response = sdk.posted.at(-1);
-  assert.equal(response.type, "lavish:snapshot");
+  assert.equal(response.type, "atlas:snapshot");
   assert.equal(response.snapshot_request_id, "snapshot-17");
   assert.equal(response.artifact_load_token, "load-token");
 });
@@ -287,7 +287,7 @@ test("the served SDK bundle queues a table-cell annotation without a missing-hel
   sdk.click(evidence);
   const message = sdk.queue("Check this permission");
 
-  assert.equal(message.type, "lavish:queuePrompt");
+  assert.equal(message.type, "atlas:queuePrompt");
   assert.equal(message.prompt.prompt, "Check this permission");
   assert.deepEqual(
     { ...message.prompt.target },
@@ -405,7 +405,7 @@ test("Escape leaves an annotation card with an in-flight attachment open, even w
 
   sdk.click(paragraph);
   const card = sdk.card();
-  const attachInput = card.querySelector(".lavish-attach-input");
+  const attachInput = card.querySelector(".atlas-attach-input");
   // Never resolves - only the synchronous "uploading" status addFiles sets is needed here.
   attachInput.files = [{ name: "shot.png", type: "image/png", size: 10, arrayBuffer: () => new Promise(() => {}) }];
   const changeListener = attachInput.listeners.find((entry) => entry.type === "change");
@@ -427,20 +427,20 @@ test("the served SDK bundle reports a draft whose anchor the artifact no longer 
   const sdk = bootSdk();
 
   sdk.sendChromeMessage({
-    type: "lavish:restoreReviewState",
+    type: "atlas:restoreReviewState",
     state: { card: { selector: "#hero", text: "needs a shorter headline" }, fields: [] },
   });
 
   // The load event proves the document parsed, not that it finished rendering, so nothing is
   // reported until the anchor has had time to appear.
   assert.equal(
-    sdk.posted.some((message) => message.type === "lavish:reviewDraftUnrestorable"),
+    sdk.posted.some((message) => message.type === "atlas:reviewDraftUnrestorable"),
     false,
   );
 
   sdk.runTimers();
   const report = sdk.posted.at(-1);
-  assert.equal(report.type, "lavish:reviewDraftUnrestorable");
+  assert.equal(report.type, "atlas:reviewDraftUnrestorable");
   assert.equal(report.selector, "#hero");
   assert.equal(report.artifact_load_token, "load-token");
 });
@@ -453,14 +453,14 @@ test("the served SDK bundle restores a draft whose anchor arrives after the load
   sdk.setDocumentQuery((selector) => (selector === "#hero" ? late : null));
 
   sdk.sendChromeMessage({
-    type: "lavish:restoreReviewState",
+    type: "atlas:restoreReviewState",
     state: { card: { selector: "#hero", text: "needs a shorter headline" }, fields: [] },
   });
   late = appendTo(sdk.body, cell("h1", "Headline"));
   sdk.runTimers();
 
   assert.equal(
-    sdk.posted.some((message) => message.type === "lavish:reviewDraftUnrestorable"),
+    sdk.posted.some((message) => message.type === "atlas:reviewDraftUnrestorable"),
     false,
     "an anchor that arrived late is restored, not reported gone",
   );
@@ -471,8 +471,8 @@ test("the served SDK bundle reports nothing when there is no draft to restore", 
   const sdk = bootSdk();
   const before = sdk.posted.length;
 
-  sdk.sendChromeMessage({ type: "lavish:restoreReviewState", state: { card: null, fields: [] } });
-  sdk.sendChromeMessage({ type: "lavish:restoreReviewState", state: { card: { selector: "#hero", text: "  " } } });
+  sdk.sendChromeMessage({ type: "atlas:restoreReviewState", state: { card: null, fields: [] } });
+  sdk.sendChromeMessage({ type: "atlas:restoreReviewState", state: { card: { selector: "#hero", text: "  " } } });
   sdk.runTimers();
 
   assert.equal(sdk.posted.length, before);
@@ -487,7 +487,7 @@ test("the served SDK bundle leaves a card the user opened alone when the anchor 
   sdk.setDocumentQuery((selector) => (selector === "#hero" ? late : null));
 
   sdk.sendChromeMessage({
-    type: "lavish:restoreReviewState",
+    type: "atlas:restoreReviewState",
     state: { card: { selector: "#hero", text: "needs a shorter headline" }, fields: [] },
   });
 
@@ -501,7 +501,7 @@ test("the served SDK bundle leaves a card the user opened alone when the anchor 
   // The draft is still stored on the chrome side, so a later load can try again; nothing here
   // claims the anchor is gone either.
   assert.equal(
-    sdk.posted.some((message) => message.type === "lavish:reviewDraftUnrestorable"),
+    sdk.posted.some((message) => message.type === "atlas:reviewDraftUnrestorable"),
     false,
   );
 });
@@ -516,13 +516,13 @@ test("the served SDK bundle drops a late restore once the user has opened a card
   sdk.setDocumentQuery((selector) => (selector === "#hero" ? late : null));
 
   sdk.sendChromeMessage({
-    type: "lavish:restoreReviewState",
+    type: "atlas:restoreReviewState",
     state: { card: { selector: "#hero", text: "needs a shorter headline" }, fields: [] },
   });
 
   const paragraph = appendTo(sdk.body, cell("p", "Just prose"));
   sdk.click(paragraph);
-  sdk.card().querySelector(".lavish-cancel").onclick();
+  sdk.card().querySelector(".atlas-cancel").onclick();
   const cardsAfterCancel = sdk.cards().length;
 
   late = appendTo(sdk.body, cell("h1", "Headline"));
@@ -531,7 +531,7 @@ test("the served SDK bundle drops a late restore once the user has opened a card
   assert.equal(sdk.cards().length, cardsAfterCancel, "the cancelled card is not replaced by a restored one");
   assert.notEqual(sdk.card().querySelector("textarea").value, "needs a shorter headline");
   assert.equal(
-    sdk.posted.some((message) => message.type === "lavish:reviewDraftUnrestorable"),
+    sdk.posted.some((message) => message.type === "atlas:reviewDraftUnrestorable"),
     false,
   );
 });

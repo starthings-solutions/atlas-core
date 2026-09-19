@@ -1,17 +1,18 @@
 {
-  "name": "lavish-axi",
+  "name": "atlas-core",
   "version": "0.1.72",
   "packageManager": "pnpm@11.1.1",
-  "description": "HTML is the new markdown. Lavish is the new editor for your HTML artifacts.",
+  "description": "Local-first HTML artifact review and collaboration for AI agents.",
+  "private": true,
   "type": "module",
   "bin": {
-    "lavish-axi": "dist/cli.mjs"
+    "atlas-core": "dist/cli.mjs"
   },
   "files": [
     "dist",
     "plugin.json",
-    "skills/lavish",
-    "lavish-editor-marketing/renders/lavish-editor-marketing.gif",
+    "skills/atlas-core",
+    "atlas-core-marketing/renders/atlas-core-marketing.gif",
     "LICENSE",
     "THIRD-PARTY-NOTICES.md",
     "README.md"
@@ -20,13 +21,13 @@
     "build": "node scripts/build.js",
     "build:skill": "node scripts/build-skill.js",
     "build:plugin": "node scripts/build-plugin.js",
+    "install:local": "node scripts/install-local.js",
     "check": "npm run build && npm run lint && npm run format:check && npm run typecheck && npm test && node scripts/build-skill.js --check && node scripts/build-plugin.js --check",
     "start": "node dist/cli.mjs",
     "lint": "eslint bin src test scripts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepack": "npm run build",
-    "prepare": "npm run build",
     "test": "node --test",
     "typecheck": "tsc --noEmit"
   },
@@ -60,6 +61,7 @@
     "node": ">=22"
   },
   "keywords": [
+    "atlas-core",
     "axi",
     "agent",
     "cli",
@@ -68,15 +70,13 @@
     "collaboration"
   ],
   "license": "MIT",
+  "author": "Starthings Solutions",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kunchenguid/lavish-axi.git"
+    "url": "git+https://github.com/starthings-solutions/atlas-core.git"
   },
   "bugs": {
-    "url": "https://github.com/kunchenguid/lavish-axi/issues"
+    "url": "https://github.com/starthings-solutions/atlas-core/issues"
   },
-  "homepage": "https://github.com/kunchenguid/lavish-axi#readme",
-  "publishConfig": {
-    "access": "public"
-  }
+  "homepage": "https://github.com/starthings-solutions/atlas-core#readme"
 }

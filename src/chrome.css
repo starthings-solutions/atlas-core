@@ -124,7 +124,7 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-body.lavish {
+body.atlas {
   color-scheme: dark;
 }
 :focus-visible {
