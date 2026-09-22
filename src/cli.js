@@ -86,9 +86,9 @@ const POLL_AGENT_REPLY_HELP_POINTER =
   "The Conversation panel's Markdown subset is in README's Feedback controls bullet.";
 const POLL_AGENT_REPLY_NEXT_POINTER =
   "The Conversation panel's Markdown subset is in `atlas-core poll --help` and README.";
-const POLL_VALUE_FLAGS = ["--agent-reply", "--agent-reply-file", "--timeout-ms"];
+const POLL_VALUE_FLAGS = ["--agent-reply", "--agent-reply-file", "--timeout-ms", "--owner"];
 const AGENT_REPLY_JSON_LIMIT_BYTES = 2 * 1024 * 1024;
-const AGENT_REPLY_JSON_ENVELOPE_BYTES = Buffer.byteLength(JSON.stringify({ text: "" }));
+const AGENT_REPLY_JSON_ENVELOPE_BYTES = Buffer.byteLength(JSON.stringify({ agent_reply: "" }));
 const AGENT_REPLY_INPUT_LIMIT_BYTES = AGENT_REPLY_JSON_LIMIT_BYTES - AGENT_REPLY_JSON_ENVELOPE_BYTES;
 const AGENT_REPLY_LIMIT_LABEL = "2 MB JSON request limit";
 const CODEX_POLL_WAKE_PATH_GUIDANCE =
@@ -215,6 +215,7 @@ export function createHomeOutput({ bin, sessions, includeSessions = true, agent 
             status: session.status,
             url: session.url,
             pending_prompts: session.pending_prompts || 0,
+            listener: session.listener || "none",
           })),
         }
       : {}),
@@ -352,14 +353,24 @@ async function pollCommand(args) {
   if (!file) {
     throw new AxiError("HTML file path is required", "VALIDATION_ERROR", ["Run `atlas-core poll <html-file>`"]);
   }
+  const ownerFlag = inspectValueFlag(args, "--owner");
+  const owner = ownerFlag.present ? String(ownerFlag.value || "").trim() : null;
+  if (ownerFlag.present && (!owner || owner.startsWith("-") || owner.toLowerCase() === "none")) {
+    throw new AxiError(
+      owner?.toLowerCase() === "none" ? "--owner none is reserved" : "--owner requires a non-empty label",
+      "VALIDATION_ERROR",
+      ["Pass `--owner <label>` to identify the process listening for feedback"],
+    );
+  }
+  const takeover = args.includes("--takeover");
   const agentReply = await resolveAgentReply(args);
   const absolute = await canonicalFile(file);
   const baseUrl = await ensureServer();
-  if (agentReply) {
-    await postJson(`${baseUrl}/api/${sessionKey(absolute)}/agent-reply`, { text: agentReply });
-  }
   const timeoutMs = flagValue(args, "--timeout-ms");
-  const timeoutQuery = timeoutMs ? `&timeoutMs=${encodeURIComponent(timeoutMs)}` : "";
+  const query = new URLSearchParams({ file: absolute });
+  if (timeoutMs) query.set("timeoutMs", timeoutMs);
+  if (owner) query.set("owner", owner);
+  if (takeover) query.set("takeover", "1");
   // The indefinite poll looks hung from the agent's side (stdout stays empty until the user
   // acts), so narrate the wait on stderr and leave re-run guidance behind if the agent's
   // harness kills the process anyway. stderr keeps the stdout JSON contract intact.
@@ -384,10 +395,25 @@ async function pollCommand(args) {
         narrateTicks: shouldNarratePollWaitTicks({ isTTY: process.stderr.isTTY }),
       });
   try {
-    const response = await fetchJson(`${baseUrl}/api/poll?file=${encodeURIComponent(absolute)}${timeoutQuery}`, {
-      retries: 3,
-      retryDelayMs: 500,
+    const request =
+      agentReply || takeover
+        ? {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(agentReply ? { agent_reply: agentReply } : {}),
+          }
+        : {};
+    const response = await fetchJson(`${baseUrl}/api/poll?${query}`, {
+      ...request,
+      // Poll ownership is claimed before the response is available. Retrying a transport failure
+      // can leave the first claim alive and make the retry reject itself as LISTENER_ACTIVE.
+      retries: 0,
     });
+    if (response.code === "LISTENER_REPLACED") {
+      throw new AxiError("Atlas Core poll listener was replaced by a takeover", "LISTENER_REPLACED", [
+        `Re-run atlas-core poll ${absolute} only if you intend to take over listening`,
+      ]);
+    }
     return createPollOutput({ file: absolute, response, agent: detectInvokingAgent(process.env) });
   } finally {
     waitReporter?.stop();
@@ -1551,7 +1577,20 @@ async function serverCommand(args) {
 
 async function visibleSessions() {
   const store = new SessionStore(stateFile());
-  return (await store.listSessions()).filter((session) => session.status !== "ended");
+  const sessions = (await store.listSessions()).filter((session) => session.status !== "ended");
+  // Adaptation: upstream reads this through findRunningServer (multi-URL control-channel
+  // discovery from lavish c5bdea4, still unmerged here in PR #1). Probe the single local
+  // base URL instead; switch to findRunningServer once that port lands.
+  const baseUrl = `http://${hostForUrl(clientHost())}:${defaultPort()}`;
+  const health = await fetchHealth(baseUrl);
+  const listeners = new Map(
+    Array.isArray(health?.listeners)
+      ? health.listeners
+          .filter((listener) => listener && typeof listener.key === "string")
+          .map((listener) => [listener.key, listener.label || "agent-listener"])
+      : [],
+  );
+  return sessions.map((session) => ({ ...session, listener: listeners.get(session.key) || "none" }));
 }
 
 async function assertHtmlFile(file) {
@@ -1789,11 +1828,19 @@ export function createServerSpawnOptions(logFd = null) {
   };
 }
 
-export async function fetchJson(url, { retries = 0, retryDelayMs = 250 } = {}) {
+/**
+ * @param {string} url
+ * @param {{ retries?: number, retryDelayMs?: number, method?: string, headers?: Record<string, string>, body?: string }} [options]
+ */
+export async function fetchJson(url, { retries = 0, retryDelayMs = 250, method = "GET", headers, body } = {}) {
   let response;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      response = await fetch(url);
+      response = await fetch(url, {
+        method,
+        ...(headers ? { headers } : {}),
+        ...(body === undefined ? {} : { body }),
+      });
       break;
     } catch (error) {
       if (error instanceof AxiError) throw error;
@@ -1804,6 +1851,26 @@ export async function fetchJson(url, { retries = 0, retryDelayMs = 250 } = {}) {
 
   if (!response) throw serverConnectionError();
   if (!response.ok) {
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // Keep the generic transport error when the server did not send JSON.
+    }
+    if (payload?.code) {
+      const holder = payload.code.startsWith("LISTENER_") && payload.holder;
+      const holderDetail =
+        holder && typeof holder.label === "string" && Number.isFinite(holder.age_ms)
+          ? ` (current listener: ${holder.label}; active for ${Math.max(0, holder.age_ms)}ms)`
+          : "";
+      const error = new AxiError(
+        `${payload.error || `Atlas Core request failed: ${response.status}`}${holderDetail}`,
+        payload.code,
+        ["Use --takeover only when you intend to displace the current listener"],
+      );
+      if (holder) Object.assign(error, { holder });
+      throw error;
+    }
     throw new AxiError(`Atlas Core request failed: ${response.status}`, "SERVER_ERROR");
   }
   try {
@@ -1913,7 +1980,7 @@ async function readAgentReplyStream(stream) {
     chunks.push(chunk);
   }
   const text = Buffer.concat(chunks, bytes).toString("utf8");
-  if (Buffer.byteLength(JSON.stringify({ text })) > AGENT_REPLY_JSON_LIMIT_BYTES) {
+  if (Buffer.byteLength(JSON.stringify({ agent_reply: text })) > AGENT_REPLY_JSON_LIMIT_BYTES) {
     throw agentReplyTooLargeError();
   }
   return text;
@@ -2020,13 +2087,13 @@ export function getCommandHelp(command, { agent = "generic" } = {}) {
 }
 
 function createTopLevelHelp({ agent = "generic" } = {}) {
-  return `atlas-core - Atlas Core AXI\n\nUsage:\n  atlas-core\n  atlas-core <html-file> [--no-open] [--no-gate] [--reopen]\n  atlas-core poll <html-file> [--agent-reply "..."] [--agent-reply-file <path>]\n  atlas-core end <html-file>\n  atlas-core export <html-file> [--out <path>]\n  atlas-core share <html-file> [--private | --password <pw>] [--token <t>]\n  atlas-core share <html-file> --site <site_id> --update-key <key> [--private | --password <pw>]\n  atlas-core share --unpublish --site <site_id> --update-key <key>\n  atlas-core stop\n  atlas-core playbook [playbook_id]\n  atlas-core design\n  atlas-core setup hooks\n  atlas-core setup plugin\n\n${DESIGN_SYSTEM_HINT}\n\nNote: poll long-polls until the user sends feedback, ends the session, or leaves every review window disconnected past the reconnect grace period, staying silent while it waits - never kill it. Layout issues the browser detects are passive: they collect in the user's Layout issues inbox in the Atlas Core top bar and reach the agent only when the user selects them and queues the fixes, as an ordinary tag "layout-warnings" prompt. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. ${pollExecutionGuidance({ agent })} ${POLL_SEND_AND_END_RULE}\n\n`;
+  return `atlas-core - Atlas Core AXI\n\nUsage:\n  atlas-core\n  atlas-core <html-file> [--no-open] [--no-gate] [--reopen]\n  atlas-core poll <html-file> [--owner <label>] [--takeover] [--agent-reply "..."] [--agent-reply-file <path>]\n  atlas-core end <html-file>\n  atlas-core export <html-file> [--out <path>]\n  atlas-core share <html-file> [--private | --password <pw>] [--token <t>]\n  atlas-core share <html-file> --site <site_id> --update-key <key> [--private | --password <pw>]\n  atlas-core share --unpublish --site <site_id> --update-key <key>\n  atlas-core stop\n  atlas-core playbook [playbook_id]\n  atlas-core design\n  atlas-core setup hooks\n  atlas-core setup plugin\n\n${DESIGN_SYSTEM_HINT}\n\nNote: poll long-polls until the user sends feedback, ends the session, or leaves every review window disconnected past the reconnect grace period, staying silent while it waits - never kill it. Layout issues the browser detects are passive: they collect in the user's Layout issues inbox in the Atlas Core top bar and reach the agent only when the user selects them and queues the fixes, as an ordinary tag "layout-warnings" prompt. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. ${pollExecutionGuidance({ agent })} ${POLL_SEND_AND_END_RULE}\n\n`;
 }
 
 function createCommandHelp({ agent = "generic" } = {}) {
   return {
     open: `Usage: atlas-core <html-file> [--no-open] [--no-gate] [--reopen]\n\nOpen or resume an Atlas Core review session for an HTML artifact. Use --no-open when you need to ensure the server/session exists without opening another browser window. Use --no-gate to skip the open-time layout curtain for this browser open. If the user explicitly ended the session from the browser, this refuses to reopen it and returns guidance instead - pass --reopen to force it open when the user asks for further review or something important needs their visual attention. Sessions ended by the agent (\`atlas-core end\`) reopen normally without the flag.\n`,
-    poll: `Usage: atlas-core poll <html-file> [--agent-reply "..."] [--agent-reply-file <path>]\n\nThis command long-polls indefinitely for queued user prompts. It stays silent while it waits - that is normal, never kill it. Browser-detected layout issues do NOT return this poll: they are filed passively in the user's Layout issues inbox and arrive as an ordinary tag "layout-warnings" prompt only after the user selects them and queues the fixes. Warning lifecycle: an issue stays unresolved and counted while queued, becomes recurring if a newer artifact revision still shows it, and is resolved only after a newer artifact load plus a complete diagnostic pass at the same viewport no longer detects it. A failed or incomplete pass preserves it as unverified rather than clearing it. The only response that arrives without user action is artifact_failures - a fatal failure that made the review surface itself unusable. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. ${pollExecutionGuidance({ agent })} Use --agent-reply after applying prior feedback to display a concise response in Atlas Core before waiting again. ${POLL_AGENT_REPLY_RULE} ${POLL_AGENT_REPLY_HELP_POINTER} Do not combine --agent-reply with --agent-reply-file.\n\nExamples:\n  atlas-core poll report.html --agent-reply "Renamed the payment step."\n  atlas-core poll report.html --agent-reply-file reply.md\n  atlas-core poll report.html --agent-reply-file -\n\n${POLL_SEND_AND_END_RULE}\n`,
+    poll: `Usage: atlas-core poll <html-file> [--owner <label>] [--takeover] [--agent-reply "..."] [--agent-reply-file <path>]\n\nThis command exclusively long-polls for queued user prompts. Pass --owner <label> to make the active listener visible in session listings; --takeover displaces an existing listener, which receives LISTENER_REPLACED. A second poll without --takeover fails with LISTENER_ACTIVE instead of silently returning waiting.\n\nThis command long-polls indefinitely for queued user prompts. It stays silent while it waits - that is normal, never kill it. Browser-detected layout issues do NOT return this poll: they are filed passively in the user's Layout issues inbox and arrive as an ordinary tag "layout-warnings" prompt only after the user selects them and queues the fixes. Warning lifecycle: an issue stays unresolved and counted while queued, becomes recurring if a newer artifact revision still shows it, and is resolved only after a newer artifact load plus a complete diagnostic pass at the same viewport no longer detects it. A failed or incomplete pass preserves it as unverified rather than clearing it. The only response that arrives without user action is artifact_failures - a fatal failure that made the review surface itself unusable. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. ${pollExecutionGuidance({ agent })} Use --agent-reply after applying prior feedback to display a concise response in Atlas Core before waiting again. ${POLL_AGENT_REPLY_RULE} ${POLL_AGENT_REPLY_HELP_POINTER} Do not combine --agent-reply with --agent-reply-file.\n\nExamples:\n  atlas-core poll report.html --agent-reply "Renamed the payment step."\n  atlas-core poll report.html --agent-reply-file reply.md\n  atlas-core poll report.html --agent-reply-file -\n\n${POLL_SEND_AND_END_RULE}\n`,
     end: `Usage: atlas-core end <html-file>\n\nEnd an Atlas Core session as the agent. A session ended this way still reopens normally on the next \`atlas-core <html-file>\`, unlike a user ending it from the browser, which requires --reopen.\n`,
     export: `Usage: atlas-core export <html-file> [--out <path>]\n\nWrite a portable copy of an artifact: one HTML file with its LOCAL assets inlined (relative-path stylesheets, scripts, images, and fonts become inline <style>/<script> blocks and data URIs). Remote CDN/font references (https URLs) are left as links for the browser to load, so the file needs network to render those. Atlas Core makes no outbound requests - it only reads local files, confined to the artifact's directory. Defaults to writing <name>.export.html next to the source; pass --out to choose a path. The Atlas Core annotation SDK is never included in an export.\n`,
     share: `Usage:\n  atlas-core share <html-file> [--private | --password <pw>] [--token <t>]\n  atlas-core share <html-file> --site <site_id> --update-key <key> [--private | --password <pw>]\n  atlas-core share --unpublish --site <site_id> --update-key <key>\n\nPublish the artifact on ht-ml.app (https://ht-ml.app), a third-party hosting service not part of Atlas Core, and print a visitable URL. Shares are PUBLIC by default: anyone with the link can open the page, and it may be indexed or scraped. Pass --private to publish a PRIVATE page behind a generated password, returned once in the output - give it to the user with the URL and tell them it is a shared secret. Pass --password <pw> instead when the user chose the password; it is never echoed back. Builds the same local-inlined HTML as 'export' (local assets inlined; remote CDN/font URLs left as links and are not blocked by CSP on ht-ml.app, but still load over the viewer's network), then POSTs it to ht-ml.app's /v1 API. Creating a site needs no account or API key. The response includes the url plus a secret update_key (shown once) for changing the page later.\n\n--site <site_id> with --update-key <key> republishes an existing page in place: same URL, new HTML. On a republish the password is left alone unless you pass --private (rotate to a new generated one) or --password <pw> (set one). There is no way to make a private page public again: ht-ml.app accepts a request to clear a password and silently ignores it, so Atlas Core does not offer one rather than reporting a page as public while it is still gated. Locking a page that was PUBLIC is also not instant at ht-ml.app's CDN: it was observed still answering uncredentialed requests for minutes after the password was set, so do not tell the user a newly gated page is unreachable right away (a page that was already private has no such cached copy).\n\n--unpublish takes the same credentials and no file. ht-ml.app has NO delete endpoint, so this replaces the page with a short placeholder and locks it behind a random password that is immediately discarded; the URL still resolves and the host still holds what was published. Say that to the user rather than calling it deleted. The update_key still works, so republishing with --private brings the page back behind a new password.\n\nA value flag given an empty or whitespace-only value is REFUSED rather than acted on: an unquoted shell variable that is unset makes \`--password $PW\` an empty password, which the host treats as none and would publish a PUBLIC page while you believed it was gated. Quote the value, or pass --private to have Atlas Core generate one.\n\nSet ATLAS_CORE_HTML_APP_TOKEN (or pass --token) to attach an optional bearer token when CREATING a page; it is never required. A republish (--site/--update-key) or --unpublish rejects --token, because the update_key is what the Authorization header carries there. The annotation SDK is never included.\n`,
