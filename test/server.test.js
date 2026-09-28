@@ -1562,9 +1562,10 @@ test("a live-event client attaching during bind retries does not crash the serve
   // is the only way to dial the server before serve() resolves and reports its port.
   const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-bind-tdz-"));
   const probe = createServer();
-  await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
-  const { port } = probe.address();
-  await new Promise((resolve) => probe.close(resolve));
+  await new Promise((resolve) => probe.listen(0, "127.0.0.1", () => resolve(undefined)));
+  const probeAddress = /** @type {import("node:net").AddressInfo} */ (probe.address());
+  const { port } = probeAddress;
+  await new Promise((resolve) => probe.close(() => resolve(undefined)));
   const failures = [];
   const onFailure = (error) => {
     failures.push(error);
