@@ -308,6 +308,11 @@ export async function serve({
   let tailscalePhoneReady = false;
   let networkWarning = typeof tailscale?.warning === "string" ? tailscale.warning : "";
   let resolvedLinkHost = linkHostName ?? resolveLinkHost({ env, tailscale, fallbackHost: host });
+  // Declared before anything listens: a live-event client or /shutdown can reach these handlers
+  // the moment the first listener binds, while later addresses are still retrying. Declaring them
+  // after the bind loop made that window a TDZ ReferenceError that crashed restarted servers.
+  let idleTimer = null;
+  let attachmentSweepTimer = null;
   const app = express();
   const store = new SessionStore(stateFile);
   const events = new EventEmitter();
@@ -1812,7 +1817,7 @@ export async function serve({
 
   // Idle self-shutdown: the timer only runs while nothing is connected. Any live event chrome or
   // active long-poll cancels it; losing the last connection (re)arms it.
-  let idleTimer = null;
+  // (idleTimer itself is declared before the bind loop; see above.)
   function refreshIdleTimer() {
     if (idleTimer) {
       clearTimeout(idleTimer);
@@ -1871,7 +1876,7 @@ export async function serve({
   // and then on a fixed interval; skipped entirely when neither a TTL nor a disk
   // cap is configured. Never touches attachments referenced by pending prompts.
   const attachmentSweepEnabled = attachmentConfig.ttlMs != null || attachmentConfig.maxDiskBytes != null;
-  let attachmentSweepTimer = null;
+  // (attachmentSweepTimer itself is declared before the bind loop; see above.)
   async function sweepAttachmentsNow() {
     try {
       // The reference snapshot AND the enumerate/delete run as one critical section

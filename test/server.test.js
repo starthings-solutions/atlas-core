@@ -1555,6 +1555,88 @@ test("a failed Tailscale listener warns and falls back without advertising Magic
   }
 });
 
+test("a live-event client attaching during bind retries does not crash the server", async () => {
+  // Regression port of lavish-axi edc0607's TDZ fix: loopback binds first and serves
+  // upgrades while the Tailscale address is still retrying, so a reconnecting chrome
+  // can reach refreshIdleTimer() before `let idleTimer` executes. A fixed (probed) port
+  // is the only way to dial the server before serve() resolves and reports its port.
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-serve-bind-tdz-"));
+  const probe = createServer();
+  await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const { port } = probe.address();
+  await new Promise((resolve) => probe.close(resolve));
+  const failures = [];
+  const onFailure = (error) => {
+    failures.push(error);
+  };
+  process.on("uncaughtException", onFailure);
+  process.on("unhandledRejection", onFailure);
+  let served = false;
+  let serveError = null;
+  const serving = serve({
+    port,
+    stateFile: path.join(dir, "state.json"),
+    version: "9.9.9-test",
+    env: {},
+    detectTailscale: async () => ({ ipv4: "192.0.2.1", magicDnsName: "unreachable.tailnet.ts.net" }),
+    log: () => {},
+    idleTimeoutMs: null,
+  });
+  serving.then(
+    () => {
+      served = true;
+    },
+    (error) => {
+      served = true;
+      serveError = error;
+    },
+  );
+  let socket = null;
+  let server = null;
+  try {
+    const base = `http://127.0.0.1:${port}`;
+    const deadline = Date.now() + 10_000;
+    let lastError = null;
+    while (socket === null && Date.now() < deadline) {
+      if (serveError) throw serveError;
+      if (served) break;
+      const attempt = new WebSocket(`${base.replace(/^http/, "ws")}/events/0123456789abcdef`, {
+        origin: base,
+      });
+      try {
+        await Promise.race([
+          once(attempt, "open"),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("attempt timed out")), 500)),
+        ]);
+        socket = attempt;
+      } catch (error) {
+        lastError = error;
+        attempt.terminate();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    }
+    assert.ok(socket, `no live-event client attached during startup: ${lastError}`);
+    // The attach must have landed inside the retry window: after serve() resolves the
+    // timers exist and this test would pass vacuously even with the bug present.
+    assert.equal(served, false, "serve() resolved before the client attached; the retry window was missed");
+    server = await serving;
+    const health = await fetch(`${base}/health`).then((response) => response.json());
+    assert.equal(health.ok, true);
+    assert.deepEqual(server.hosts, ["127.0.0.1"]);
+    assert.deepEqual(
+      failures.map((failure) => String(failure?.message || failure)),
+      [],
+    );
+  } finally {
+    process.off("uncaughtException", onFailure);
+    process.off("unhandledRejection", onFailure);
+    socket?.terminate();
+    if (!server) server = await serving.catch(() => null);
+    if (server) await server.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("Tailscale mode binds concrete listeners, serves the MagicDNS link, and tears down every listener", async (t) => {
   const tailscaleIpv4 = availableConcreteIpv4();
   if (!tailscaleIpv4) {
