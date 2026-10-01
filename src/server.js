@@ -1007,9 +1007,13 @@ export async function serve({
   app.post("/api/:key/agent-reply", async (req, res, next) => {
     try {
       const text = String(req.body?.text || "");
-      const session = await store.addAgentReply(req.params.key, text);
+      const session = await store.addAgentReply(req.params.key, text, { requireOpen: true });
       if (!session) {
         res.status(404).json({ error: "session not found" });
+        return;
+      }
+      if (session.status === "ended") {
+        res.status(409).json({ status: "ended", ended_by: session.ended_by });
         return;
       }
       const entry = serializeChat([
