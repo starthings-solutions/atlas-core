@@ -1,6 +1,6 @@
 # Lavish sync log
 
-last-verified: 87d6ae9bf975cf4531c64926cbb58993f5327328
+last-verified: 40cafa206916cf21e4996158c347e58364d01559
 
 ## 2026-09-19 — c5bdea4, c69a512, 20159e0
 
@@ -27,3 +27,11 @@ last-verified: 87d6ae9bf975cf4531c64926cbb58993f5327328
 - `2da85ba` ci: exempt kunchenguid from no-mistakes required gate (#367) — pulado: upstream-author-specific CI gate change, not runtime motor
 - `b7e59cb` chore(main): release lavish-axi 0.1.77 (#366) — pulado: release-please (`CHANGELOG.md`, version bump), never portable
 - `87d6ae9` fix(server): keep the reviewer's artifact load across a server restart (#371) — portado em `4324ea1` (durable `session.artifact_load` epoch + restore-on-first-access with handoff rebind, all-or-nothing record validation, restart/fence/corruption tests; adapted: test tmpdir prefixes `atlas-serve-`/`atlas-store-`, server-test comment cites upstream lavish-axi#369/#371 instead of `npx lavish-axi`, dummy `localhost:4387` URLs kept per this file's existing never-dialed convention)
+
+## 2026-09-28 — 87d6ae9..40cafa2 (5 commits)
+
+- `edc0607` fix: keep one review server reachable across network changes (#374) — PARCIAL, portado em `eb43c8b`: hoisted `idleTimer` + `attachmentSweepTimer` above the bind loop (upstream's TDZ fix; `bindRecoveryTimer` does not exist here) with a regression test that attaches a live-event client during Tailscale bind retries; no other behavior change. RESTO DIFERIDO (temporário): CLI discovery sweep, `pendingBinds` background recovery, `--also-listen`, installation identity (`stateId`), `killServerProcess` rename — stack on deferred 2430a3f / follow-up bind-path work even though PR #1 durability scaffolding is now on main; re-evaluate in a later sync. Note: hoist kept when resolving merge of PR #1 bind-region rewrite.
+- `69574a8` chore(main): release lavish-axi 0.1.78 (#372) — pulado: release-please (`CHANGELOG.md`, version bump), never portable
+- `f4ed5ff` feat: add standalone answer copying to input playbook (#377) — pulado: playbook guidance-text feature (opt-in artifact-author snippet + README bullet), no Atlas runtime behavior change; could be added natively later with `data-atlas-*` names
+- `3d26e6b` docs: trim agent guidance and relocate implementation invariants (#380) — pulado: docs-only (AGENTS.md restructure, which Atlas owns itself) plus a one-line comment pointer to `docs/invariants.md`, a file that does not exist here
+- `40cafa2` chore(main): release lavish-axi 0.1.79 (#378) — pulado: release-please (`CHANGELOG.md`, version bump), never portable
