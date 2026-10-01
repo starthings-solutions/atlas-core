@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -33,14 +34,15 @@ import {
   detectInvokingAgent,
   fetchJson,
   getCommandHelp,
+  herdrPollChimeEnabled,
   normalizeArgv,
+  notifyHerdrPollReady,
   resolveShareRequest,
   pollInterruptedText,
   pollWaitBannerText,
   pollWaitTickText,
   resolveCopilotHookDir,
   resolveHookHomeDir,
-  resolveServerEntry,
   serverReplacementReason,
   shareCommand,
   shutdownServerOnPort,
@@ -2182,6 +2184,122 @@ test("poll wait messages tell watching agents the silence is normal", () => {
   assert.match(interrupted, /feedback remains queued until delivery/);
 });
 
+test("Herdr poll chime is disabled unless both Atlas Core and Herdr opt in", () => {
+  assert.equal(herdrPollChimeEnabled({}), false);
+  assert.equal(herdrPollChimeEnabled({ HERDR_ENV: "1" }), false);
+  assert.equal(herdrPollChimeEnabled({ ATLAS_CORE_HERDR_CHIME: "1" }), false);
+  assert.equal(herdrPollChimeEnabled({ HERDR_ENV: "1", ATLAS_CORE_HERDR_CHIME: "0" }), false);
+  assert.equal(herdrPollChimeEnabled({ HERDR_ENV: "1", ATLAS_CORE_HERDR_CHIME: "1" }), true);
+});
+
+test("Herdr poll chime requests attention without making notification failure fatal", async () => {
+  const calls = [];
+  /** @type {import("node:child_process").ChildProcess | undefined} */
+  let child;
+  const notified = notifyHerdrPollReady({
+    env: { HERDR_ENV: "1", ATLAS_CORE_HERDR_CHIME: "1" },
+    runner(command, args, options) {
+      calls.push({ command, args, options });
+      child = spawn(process.execPath, ["-e", "process.exit(0)"], options);
+      return child;
+    },
+  });
+
+  assert.equal(notified, true);
+  assert.ok(child);
+  child.ref();
+  await once(child, "close");
+  assert.deepEqual(calls, [
+    {
+      command: "herdr",
+      args: [
+        "notification",
+        "show",
+        "Atlas review ready",
+        "--body",
+        "The artifact is open and Atlas Core is polling for your feedback.",
+        "--sound",
+        "request",
+      ],
+      options: { stdio: "ignore" },
+    },
+  ]);
+
+  assert.equal(
+    notifyHerdrPollReady({
+      env: { HERDR_ENV: "1", ATLAS_CORE_HERDR_CHIME: "1" },
+      runner() {
+        throw new Error("Herdr unavailable");
+      },
+    }),
+    false,
+  );
+});
+
+test("Herdr failures and a stalled notification do not delay poll feedback", { timeout: 10_000 }, async (t) => {
+  const server = createServer((_req, res) => {
+    res.setHeader("Atlas-Poll-State", "listening");
+    res.end(JSON.stringify({ status: "feedback", prompts: [{ text: "Review this" }] }));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => server.close());
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const env = { HERDR_ENV: "1", ATLAS_CORE_HERDR_CHIME: "1" };
+
+  for (const behavior of ["missing", "rejected", "stalled"]) {
+    await t.test(behavior, async () => {
+      const exitListeners = process.listenerCount("exit");
+      /** @type {import("node:child_process").ChildProcess | undefined} */
+      let child;
+      /** @type {Promise<{ code: number | null, signal: NodeJS.Signals | null }> | undefined} */
+      let closed;
+      const response = await fetchJson(`http://127.0.0.1:${address.port}`, {
+        onResponse() {
+          notifyHerdrPollReady({
+            env,
+            runner(_command, _args, options) {
+              child =
+                behavior === "missing"
+                  ? spawn(path.join(process.cwd(), "missing-herdr-executable"), [], options)
+                  : spawn(
+                      process.execPath,
+                      [
+                        "-e",
+                        behavior === "rejected"
+                          ? "process.exit(1)"
+                          : "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)",
+                      ],
+                      options,
+                    );
+              closed = new Promise((resolve) => child.once("close", (code, signal) => resolve({ code, signal })));
+              return child;
+            },
+          });
+        },
+      });
+      try {
+        assert.ok(child);
+        assert.ok(closed);
+        assert.deepEqual(response, { status: "feedback", prompts: [{ text: "Review this" }] });
+        if (behavior === "stalled") {
+          assert.equal(child.exitCode, null);
+          assert.equal(child.signalCode, null);
+          const result = await closed;
+          if (process.platform !== "win32") assert.equal(result.signal, "SIGKILL");
+          assert.ok(child.killed);
+        } else {
+          await closed;
+        }
+        assert.equal(process.listenerCount("exit"), exitListeners);
+      } finally {
+        child?.kill("SIGKILL");
+      }
+    });
+  }
+});
+
 test("poll wait reporter writes a banner immediately and heartbeats on an interval", async () => {
   const lines = [];
   const reporter = startPollWaitReporter({
@@ -2792,15 +2910,11 @@ test("server spawn options can persist detached server output to a log fd", () =
   assert.deepEqual(options.stdio, ["ignore", 17, 17]);
 });
 
-test("server entry resolves to a node-executable script that actually invokes run()", () => {
-  // Running from source, the entry must be `bin/atlas-core.js` (the only file in the
-  // source tree that calls run() on import). In the published bundle only `dist/cli.mjs`
-  // ships - it embeds the bin wrapper so it self-invokes. Either way, spawning the entry
-  // with `node <entry> server` must boot the server, not silently load the module and exit.
-  const entry = resolveServerEntry();
-  assert.ok(existsSync(entry), `server entry must exist on disk, got: ${entry}`);
-  // From source: bin/atlas-core.js is present and preferred.
-  assert.equal(entry, fileURLToPath(new URL("../bin/atlas-core.js", import.meta.url)));
+test("detached server entry dispatches the CLI", () => {
+  const entry = fileURLToPath(new URL("../bin/atlas-core-server.js", import.meta.url));
+  const result = spawnSync(process.execPath, [entry, "--version"], { encoding: "utf8" });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /\d+\.\d+\.\d+/);
 });
 
 test("local built CLI opens force a server restart while source and installed runs do not", () => {
