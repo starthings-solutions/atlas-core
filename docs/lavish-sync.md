@@ -2,11 +2,41 @@
 
 last-verified: a2a199cd2275ab4d5cea1b94d42e2479bda36321
 
+## 2026-09-19 — c5bdea4, c69a512, 20159e0
+
+- c5bdea4 fix(server): make live-review failures recoverable (#353) — portado em f81d3ee (loopback fallback + bounded bind retry, control-channel discovery primary→loopback, live-event ping/pong, unreachable banner após 5 falhas, server.log com UTC timestamps + shutdown cause, detached spawn via bin/atlas-core-server.js; adaptado: `lavish-axi`→`atlas-core`, `LAVISH_AXI_*`→`ATLAS_CORE_*`, `[lavish]`→`[atlas]`)
+- c69a512 chore(main): release lavish-axi 0.1.73 (#354) — pulado: release-please (CHANGELOG.md, .release-please-manifest.json, version bump), nunca portável
+- 20159e0 feat(poll): add opt-in Herdr readiness chime (#355) — portado em f81d3ee (header Atlas-Poll-State: listening, fetchJson onResponse hook, opt-in HERDR_ENV=1 + ATLAS_CORE_HERDR_CHIME=1, notificação "Atlas review ready"; nonblocking por construção)
+
+## 2026-09-22 — d628531..bdf5c78 (10 commits)
+
+- `c5bdea4` fix(server): make live-review failures recoverable (#353) — already on main via merged PR #1 (`chore/lavish-sync-2026-09-19`); not re-ported here
+- `c69a512` chore(main): release lavish-axi 0.1.73 (#354) — pulado: release-please (`CHANGELOG.md`, version bump), never portable
+- `20159e0` feat(poll): add opt-in Herdr readiness chime (#355) — already on main via merged PR #1 (`chore/lavish-sync-2026-09-19`); not re-ported here
+- `2430a3f` fix(server): record startup and runtime failures (#357) — pulado (temporário): PR #1 now merged (bind durability scaffolding present on main); re-evaluate port in a follow-up sync
+- `37f1983` chore(main): release lavish-axi 0.1.74 (#356) — pulado: release-please, never portable
+- `d5ac546` feat: add exclusive visible poll listeners (#358) — portado em `7722d80` (on main via merged PR #2; exclusive per-session poll ownership with `LISTENER_ACTIVE`/`LISTENER_REPLACED`, `--owner`/`--takeover`, atomic `--agent-reply` via `POST /api/poll`, presence modes, `/health` listeners; adapted: Atlas Core naming; Herdr `onResponse` hook restored after rebase onto PR #1)
+- `90b7ff9` chore(main): release lavish-axi 0.1.75 (#359) — pulado: release-please, never portable
+- `b4e82c6` feat(chrome): add revision legend for agent-declared artifact edits (#361) — pulado: new chrome UI surface (legend drawer + chrome CSS + design-guidance text), not runtime motor
+- `47e690b` chore(main): release lavish-axi 0.1.76 (#364) — pulado: release-please, never portable
+- `bdf5c78` Pin no-mistakes required-check caller to v1.80.1 (T2) (#365) — pulado: CI workflow pin, not motor (pin bumps ship in deliberate separate PRs)
+
+## 2026-09-22 — bdf5c78..87d6ae9 (4 commits)
+
+- `a3b3987` fix: clarify HTML file output in the Lavish skill (#344) — pulado: skill description/marketing text only (`lavish` branding), not motor
+- `2da85ba` ci: exempt kunchenguid from no-mistakes required gate (#367) — pulado: upstream-author-specific CI gate change, not runtime motor
+- `b7e59cb` chore(main): release lavish-axi 0.1.77 (#366) — pulado: release-please (`CHANGELOG.md`, version bump), never portable
+- `87d6ae9` fix(server): keep the reviewer's artifact load across a server restart (#371) — portado em `4324ea1` (durable `session.artifact_load` epoch + restore-on-first-access with handoff rebind, all-or-nothing record validation, restart/fence/corruption tests; adapted: test tmpdir prefixes `atlas-serve-`/`atlas-store-`, server-test comment cites upstream lavish-axi#369/#371 instead of `npx lavish-axi`, dummy `localhost:4387` URLs kept per this file's existing never-dialed convention)
+
+## 2026-09-28 — 87d6ae9..40cafa2 (5 commits)
+
+- `edc0607` fix: keep one review server reachable across network changes (#374) — PARCIAL, portado em `eb43c8b`: hoisted `idleTimer` + `attachmentSweepTimer` above the bind loop (upstream's TDZ fix; `bindRecoveryTimer` does not exist here) with a regression test that attaches a live-event client during Tailscale bind retries; no other behavior change. RESTO DIFERIDO (temporário): CLI discovery sweep, `pendingBinds` background recovery, `--also-listen`, installation identity (`stateId`), `killServerProcess` rename — stack on deferred 2430a3f / follow-up bind-path work even though PR #1 durability scaffolding is now on main; re-evaluate in a later sync. Note: hoist kept when resolving merge of PR #1 bind-region rewrite.
+- `69574a8` chore(main): release lavish-axi 0.1.78 (#372) — pulado: release-please (`CHANGELOG.md`, version bump), never portable
+- `f4ed5ff` feat: add standalone answer copying to input playbook (#377) — pulado: playbook guidance-text feature (opt-in artifact-author snippet + README bullet), no Atlas runtime behavior change; could be added natively later with `data-atlas-*` names
+- `3d26e6b` docs: trim agent guidance and relocate implementation invariants (#380) — pulado: docs-only (AGENTS.md restructure, which Atlas owns itself) plus a one-line comment pointer to `docs/invariants.md`, a file that does not exist here
+- `40cafa2` chore(main): release lavish-axi 0.1.79 (#378) — pulado: release-please (`CHANGELOG.md`, version bump), never portable
+
 ## 2026-10-01 — ae66e1a..a2a199c (2 commits)
 
-- `ae66e1a` feat(cli): add a reply command with server acceptance receipt (#392) — portado em `d7aea2e`: new `atlas-core reply` command (receipt via `postAgentReply`, 10s `AGENT_REPLY_RECEIPT_TIMEOUT_MS`, `SESSION_ENDED` on 409), `POST /api/:key/agent-reply` 409s ended sessions (`addAgentReply` `requireOpen`), reply/poll help + home/open/feedback guidance, skill pointer, README rows, `test/cli-reply.test.js`. ADAPTAÇÕES: (1) `poll --agent-reply` keeps working on ended sessions via new `postPollAgentReply`, which tolerates the 409-ended outcome and keeps polling — Atlas posts poll replies through the same endpoint and has no upstream atomic claim path yet (unmerged PR #2), so unlike upstream the refused text stays undelivered and the ported test asserts `status: ended` + unchanged transcript instead of "Poll still posts"; (2) `board` → `review page` in CLI strings; (3) dropped the `mode: agent-busy` presence assertion (Atlas presence has no mode yet); (4) the `docs/invariants.md` hunk was folded into the matching `AGENTS.md` line (that file does not exist here); the README skill-stub sentence hunk had no Atlas counterpart and was skipped.
+- `ae66e1a` feat(cli): add a reply command with server acceptance receipt (#392) — portado em `d7aea2e`: new `atlas-core reply` command (receipt via `postAgentReply`, 10s `AGENT_REPLY_RECEIPT_TIMEOUT_MS`, `SESSION_ENDED` on 409), `POST /api/:key/agent-reply` 409s ended sessions (`addAgentReply` `requireOpen`), reply/poll help + home/open/feedback guidance, skill pointer, README rows, `test/cli-reply.test.js`. ADAPTAÇÕES after rebase onto merged PRs #1–#4: (1) `poll --agent-reply` uses the atomic `POST /api/poll` claim from PR #2 (`publishAgentReply`) rather than a pre-poll `postPollAgentReply` to the receipt endpoint; (2) `board` → `review page` in CLI strings; (3) presence modes from PR #2 are present; (4) the `docs/invariants.md` hunk was folded into the matching `AGENTS.md` line (that file does not exist here); the README skill-stub sentence hunk had no Atlas counterpart and was skipped.
 - `a2a199c` chore(main): release lavish-axi 0.1.80 (#393) — pulado: release-please (`CHANGELOG.md`, version bump), never portable
-
-## d628531..40cafa2 — avaliado nos open PRs #1, #2, #3, #4 (branches `chore/lavish-sync-*`)
-
-- Range coberto por: PR #1 (c5bdea4 + 20159e0), PR #2 (d5ac546), PR #3 (87d6ae9), PR #4 (edc0607 parcial + log até 40cafa2); skips registrados nos logs daqueles branches. Este arquivo ainda não existe na `main`; ele será combinado no merge.

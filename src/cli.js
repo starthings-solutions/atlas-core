@@ -31,7 +31,15 @@ import {
   publishToHtmlApp,
   updateHtmlApp,
 } from "./html-app.js";
-import { clientHost, defaultPort, ensureStateDir, hostForUrl, serverLogFile, stateFile } from "./paths.js";
+import {
+  clientHost,
+  defaultPort,
+  ensureStateDir,
+  hostForUrl,
+  LOOPBACK_HOST,
+  serverLogFile,
+  stateFile,
+} from "./paths.js";
 import {
   computeVsCodePluginLocationsUpdate,
   linkCursorLocalPlugin,
@@ -87,11 +95,12 @@ const POLL_AGENT_REPLY_HELP_POINTER =
   "The Conversation panel's Markdown subset is in README's Feedback controls bullet.";
 const POLL_AGENT_REPLY_NEXT_POINTER =
   "The Conversation panel's Markdown subset is in `atlas-core poll --help` and README.";
-const POLL_VALUE_FLAGS = ["--agent-reply", "--agent-reply-file", "--timeout-ms"];
+const POLL_VALUE_FLAGS = ["--agent-reply", "--agent-reply-file", "--timeout-ms", "--owner"];
 const AGENT_REPLY_JSON_LIMIT_BYTES = 2 * 1024 * 1024;
-const AGENT_REPLY_JSON_ENVELOPE_BYTES = Buffer.byteLength(JSON.stringify({ text: "" }));
+const AGENT_REPLY_JSON_ENVELOPE_BYTES = Buffer.byteLength(JSON.stringify({ agent_reply: "" }));
 const AGENT_REPLY_INPUT_LIMIT_BYTES = AGENT_REPLY_JSON_LIMIT_BYTES - AGENT_REPLY_JSON_ENVELOPE_BYTES;
 const AGENT_REPLY_LIMIT_LABEL = "2 MB JSON request limit";
+const POLL_STATE_HEADER = "atlas-poll-state";
 const CODEX_POLL_WAKE_PATH_GUIDANCE =
   "Codex detected: completed background tasks may not resume Codex automatically, so keep the poll attached to the active turn.";
 // Inlined at build time from package.json; falls back to reading package.json so source-run tests work.
@@ -105,6 +114,56 @@ export function detectInvokingAgent(env = process.env) {
 
 export function shouldNarratePollWaitTicks({ isTTY }) {
   return Boolean(isTTY);
+}
+
+export function herdrPollChimeEnabled(env = process.env) {
+  return env.HERDR_ENV === "1" && env.ATLAS_CORE_HERDR_CHIME === "1";
+}
+
+/**
+ * @param {{
+ *   env?: NodeJS.ProcessEnv,
+ *   runner?: (command: string, args: string[], options: { stdio: "ignore" }) => import("node:child_process").ChildProcess,
+ * }} [options]
+ */
+export function notifyHerdrPollReady({ env = process.env, runner = spawn } = {}) {
+  if (!herdrPollChimeEnabled(env)) return false;
+  try {
+    const child = runner(
+      "herdr",
+      [
+        "notification",
+        "show",
+        "Atlas review ready",
+        "--body",
+        "The artifact is open and Atlas Core is polling for your feedback.",
+        "--sound",
+        "request",
+      ],
+      { stdio: "ignore" },
+    );
+    const kill = () => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        return;
+      }
+    };
+    const timer = setTimeout(kill, 2_000);
+    timer.unref();
+    const cleanup = () => {
+      clearTimeout(timer);
+      process.off("exit", kill);
+    };
+    child.on("error", () => {});
+    child.once("close", cleanup);
+    process.once("exit", kill);
+    child.unref();
+    return true;
+  } catch {
+    // A desktop notification is optional and must never interrupt feedback delivery.
+    return false;
+  }
 }
 
 export function pollExecutionGuidance({ agent = "generic" } = {}) {
@@ -217,6 +276,7 @@ export function createHomeOutput({ bin, sessions, includeSessions = true, agent 
             status: session.status,
             url: session.url,
             pending_prompts: session.pending_prompts || 0,
+            listener: session.listener || "none",
           })),
         }
       : {}),
@@ -355,14 +415,24 @@ async function pollCommand(args) {
   if (!file) {
     throw new AxiError("HTML file path is required", "VALIDATION_ERROR", ["Run `atlas-core poll <html-file>`"]);
   }
+  const ownerFlag = inspectValueFlag(args, "--owner");
+  const owner = ownerFlag.present ? String(ownerFlag.value || "").trim() : null;
+  if (ownerFlag.present && (!owner || owner.startsWith("-") || owner.toLowerCase() === "none")) {
+    throw new AxiError(
+      owner?.toLowerCase() === "none" ? "--owner none is reserved" : "--owner requires a non-empty label",
+      "VALIDATION_ERROR",
+      ["Pass `--owner <label>` to identify the process listening for feedback"],
+    );
+  }
+  const takeover = args.includes("--takeover");
   const agentReply = await resolveAgentReply(args);
   const absolute = await canonicalFile(file);
   const baseUrl = await ensureServer();
-  if (agentReply) {
-    await postPollAgentReply(`${baseUrl}/api/${sessionKey(absolute)}/agent-reply`, agentReply);
-  }
   const timeoutMs = flagValue(args, "--timeout-ms");
-  const timeoutQuery = timeoutMs ? `&timeoutMs=${encodeURIComponent(timeoutMs)}` : "";
+  const query = new URLSearchParams({ file: absolute });
+  if (timeoutMs) query.set("timeoutMs", timeoutMs);
+  if (owner) query.set("owner", owner);
+  if (takeover) query.set("takeover", "1");
   // The indefinite poll looks hung from the agent's side (stdout stays empty until the user
   // acts), so narrate the wait on stderr and leave re-run guidance behind if the agent's
   // harness kills the process anyway. stderr keeps the stdout JSON contract intact.
@@ -387,10 +457,28 @@ async function pollCommand(args) {
         narrateTicks: shouldNarratePollWaitTicks({ isTTY: process.stderr.isTTY }),
       });
   try {
-    const response = await fetchJson(`${baseUrl}/api/poll?file=${encodeURIComponent(absolute)}${timeoutQuery}`, {
-      retries: 3,
-      retryDelayMs: 500,
+    const request =
+      agentReply || takeover
+        ? {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(agentReply ? { agent_reply: agentReply } : {}),
+          }
+        : {};
+    const response = await fetchJson(`${baseUrl}/api/poll?${query}`, {
+      ...request,
+      // Poll ownership is claimed before the response is available. Retrying a transport failure
+      // can leave the first claim alive and make the retry reject itself as LISTENER_ACTIVE.
+      retries: 0,
+      onResponse: (pollResponse) => {
+        if (pollResponse.headers.get(POLL_STATE_HEADER) === "listening") notifyHerdrPollReady();
+      },
     });
+    if (response.code === "LISTENER_REPLACED") {
+      throw new AxiError("Atlas Core poll listener was replaced by a takeover", "LISTENER_REPLACED", [
+        `Re-run atlas-core poll ${absolute} only if you intend to take over listening`,
+      ]);
+    }
     return createPollOutput({ file: absolute, response, agent: detectInvokingAgent(process.env) });
   } finally {
     waitReporter?.stop();
@@ -1160,7 +1248,9 @@ function generatedPasswordNote(password) {
 // session), this stops the background process so it stops dangling between sessions.
 export async function stopCommand(args) {
   const port = Number(flagValue(args, "--port") || defaultPort());
-  const baseUrl = `http://${hostForUrl(clientHost())}:${port}`;
+  // A server that fell back to loopback answers there rather than at the requested bind host, and
+  // a `stop` that only dials the requested host reports "not-running" while leaving it running.
+  const { baseUrl } = await findRunningServer(port);
   return shutdownServerOnPort(port, { baseUrl, currentVersion: VERSION });
 }
 
@@ -1592,7 +1682,20 @@ async function serverCommand(args) {
 
 async function visibleSessions() {
   const store = new SessionStore(stateFile());
-  return (await store.listSessions()).filter((session) => session.status !== "ended");
+  const sessions = (await store.listSessions()).filter((session) => session.status !== "ended");
+  // Adaptation: upstream reads this through findRunningServer (multi-URL control-channel
+  // discovery from lavish c5bdea4, still unmerged here in PR #1). Probe the single local
+  // base URL instead; switch to findRunningServer once that port lands.
+  const baseUrl = `http://${hostForUrl(clientHost())}:${defaultPort()}`;
+  const health = await fetchHealth(baseUrl);
+  const listeners = new Map(
+    Array.isArray(health?.listeners)
+      ? health.listeners
+          .filter((listener) => listener && typeof listener.key === "string")
+          .map((listener) => [listener.key, listener.label || "agent-listener"])
+      : [],
+  );
+  return sessions.map((session) => ({ ...session, listener: listeners.get(session.key) || "none" }));
 }
 
 async function assertHtmlFile(file) {
@@ -1612,12 +1715,57 @@ function isHtmlPath(file) {
   return file.toLowerCase().endsWith(".html") || file.toLowerCase().endsWith(".htm");
 }
 
+// A server that could not bind its requested address falls back to loopback (see `serve()`), so
+// the control channel has to look there too. Without this the CLI reports "did not start" for a
+// server that IS running, and the next invocation spawns a duplicate daemon beside it.
+function serverBaseUrls(port) {
+  const urls = [`http://${hostForUrl(clientHost())}:${port}`];
+  const loopback = `http://${hostForUrl(LOOPBACK_HOST)}:${port}`;
+  if (!urls.includes(loopback)) urls.push(loopback);
+  return urls;
+}
+
+const HEALTH_PROBE_TIMEOUT_MS = 500;
+
+// Returns where an Atlas Core server actually answered. Each candidate probe is bounded so a hanging
+// requested address cannot mask loopback, and a response whose app is atlas-core wins over a
+// foreign /health. When nothing answers, the primary URL is still returned so callers have
+// something to spawn against and report.
+async function findRunningServer(port, { reconcileNetwork = false } = {}) {
+  const candidates = serverBaseUrls(port);
+  let foreign = null;
+  for (const baseUrl of candidates) {
+    const health = await probeHealth(baseUrl, { reconcileNetwork, timeoutMs: HEALTH_PROBE_TIMEOUT_MS });
+    if (!health) continue;
+    if (health.app === "atlas-core") return { baseUrl, health };
+    if (!foreign) foreign = { baseUrl, health };
+  }
+  return foreign ?? { baseUrl: candidates[0], health: null };
+}
+
+async function probeHealth(baseUrl, { reconcileNetwork, timeoutMs }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const health = await Promise.race([
+      Promise.resolve()
+        .then(() => fetchHealth(baseUrl, { reconcileNetwork, timeoutMs, signal: controller.signal }))
+        .catch(() => null),
+      new Promise((resolve) => {
+        controller.signal.addEventListener("abort", () => resolve(null), { once: true });
+      }),
+    ]);
+    return health && typeof health === "object" ? health : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // `reloadKey` names the session this invocation is about to open. A version-driven replacement
 // reloads that chrome only; every other open review page is told it is outdated and left alone.
 async function ensureServer({ forceRestart = false, reloadKey = "" } = {}) {
   const port = defaultPort();
-  const baseUrl = `http://${hostForUrl(clientHost())}:${port}`;
-  const existing = await fetchHealth(baseUrl, { reconcileNetwork: true });
+  const { baseUrl, health: existing } = await findRunningServer(port, { reconcileNetwork: true });
   if (existing && !shouldRestartServer(VERSION, existing, forceRestart)) {
     return baseUrl;
   }
@@ -1642,15 +1790,22 @@ async function ensureServer({ forceRestart = false, reloadKey = "" } = {}) {
     }
   }
   await startServer(port);
-  let networkRestarted = false;
+  const replacedForNetwork =
+    Boolean(existing) &&
+    existing.app === "atlas-core" &&
+    existing.network_stale === true &&
+    !forceRestart &&
+    typeof existing.version === "string" &&
+    existing.version === VERSION;
+  let networkRestarted = replacedForNetwork;
   let deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
-    const health = await fetchHealth(baseUrl, { reconcileNetwork: true });
-    if (health && !shouldRestartServer(VERSION, health)) return baseUrl;
+    const { baseUrl: liveUrl, health } = await findRunningServer(port, { reconcileNetwork: true });
+    if (health && !shouldRestartServer(VERSION, health)) return liveUrl;
     if (health?.network_stale === true && health.app === "atlas-core") {
-      if (networkRestarted) return baseUrl;
-      await requestShutdown(baseUrl, { reloadKey, reason: "" });
-      if (!(await waitForPortFree(baseUrl, 3000))) break;
+      if (networkRestarted) return liveUrl;
+      await requestShutdown(liveUrl, { reloadKey, reason: "" });
+      if (!(await waitForPortFree(liveUrl, 3000))) break;
       await startServer(port);
       networkRestarted = true;
       deadline = Date.now() + 5000;
@@ -1710,10 +1865,15 @@ async function canControlServerOnPort(port, healthBody, processMatchesAtlas) {
   return processMatchesAtlas(port);
 }
 
-async function fetchHealth(baseUrl, { reconcileNetwork = false } = {}) {
+/**
+ * @param {string} baseUrl
+ * @param {{ reconcileNetwork?: boolean, timeoutMs?: number, signal?: AbortSignal }} [options]
+ */
+async function fetchHealth(baseUrl, { reconcileNetwork = false, timeoutMs, signal } = {}) {
   try {
     const suffix = reconcileNetwork ? "?reconcile_network=1" : "";
-    const response = await fetch(`${baseUrl}/health${suffix}`);
+    const abortSignal = signal ?? (timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined);
+    const response = await fetch(`${baseUrl}/health${suffix}`, abortSignal ? { signal: abortSignal } : {});
     if (!response.ok) return null;
     return await response.json();
   } catch {
@@ -1805,14 +1965,14 @@ async function startServer(port) {
   }
 }
 
-// The detached server child must point at a node-executable entry that actually invokes
-// run(). In source layout that's `../bin/atlas-core.js` (which calls run on import). In the
-// published bundle, only `dist/cli.mjs` ships and it self-invokes via the bundled bin
-// wrapper. Pick whichever exists.
-export function resolveServerEntry() {
-  const binEntry = fileURLToPath(new URL("../bin/atlas-core.js", import.meta.url));
-  if (existsSync(binEntry)) return binEntry;
-  return fileURLToPath(import.meta.url);
+// The detached server child must stamp stdio before evaluating the CLI. In source layout that
+// is `../bin/atlas-core-server.js`. In the published bundle only `dist/` ships, so the sibling
+// `server.mjs` bootstrap is the entry. Ordinary user-facing commands still use `bin/atlas-core.js`
+// / `dist/cli.mjs`.
+function resolveServerEntry() {
+  const sourceEntry = fileURLToPath(new URL("../bin/atlas-core-server.js", import.meta.url));
+  if (existsSync(sourceEntry)) return sourceEntry;
+  return fileURLToPath(new URL("./server.mjs", import.meta.url));
 }
 
 /**
@@ -1830,11 +1990,19 @@ export function createServerSpawnOptions(logFd = null) {
   };
 }
 
-export async function fetchJson(url, { retries = 0, retryDelayMs = 250 } = {}) {
+/**
+ * @param {string} url
+ * @param {{ retries?: number, retryDelayMs?: number, method?: string, headers?: Record<string, string>, body?: string, onResponse?: ((response: Response) => void) | null }} [options]
+ */
+export async function fetchJson(url, { retries = 0, retryDelayMs = 250, method = "GET", headers, body, onResponse = null } = {}) {
   let response;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      response = await fetch(url);
+      response = await fetch(url, {
+        method,
+        ...(headers ? { headers } : {}),
+        ...(body === undefined ? {} : { body }),
+      });
       break;
     } catch (error) {
       if (error instanceof AxiError) throw error;
@@ -1845,8 +2013,29 @@ export async function fetchJson(url, { retries = 0, retryDelayMs = 250 } = {}) {
 
   if (!response) throw serverConnectionError();
   if (!response.ok) {
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // Keep the generic transport error when the server did not send JSON.
+    }
+    if (payload?.code) {
+      const holder = payload.code.startsWith("LISTENER_") && payload.holder;
+      const holderDetail =
+        holder && typeof holder.label === "string" && Number.isFinite(holder.age_ms)
+          ? ` (current listener: ${holder.label}; active for ${Math.max(0, holder.age_ms)}ms)`
+          : "";
+      const error = new AxiError(
+        `${payload.error || `Atlas Core request failed: ${response.status}`}${holderDetail}`,
+        payload.code,
+        ["Use --takeover only when you intend to displace the current listener"],
+      );
+      if (holder) Object.assign(error, { holder });
+      throw error;
+    }
     throw new AxiError(`Atlas Core request failed: ${response.status}`, "SERVER_ERROR");
   }
+  onResponse?.(response);
   try {
     return await response.json();
   } catch {
@@ -2045,7 +2234,7 @@ async function readAgentReplyStream(stream, tooLargeHelp) {
     chunks.push(chunk);
   }
   const text = Buffer.concat(chunks, bytes).toString("utf8");
-  if (Buffer.byteLength(JSON.stringify({ text })) > AGENT_REPLY_JSON_LIMIT_BYTES) {
+  if (Buffer.byteLength(JSON.stringify({ agent_reply: text })) > AGENT_REPLY_JSON_LIMIT_BYTES) {
     throw agentReplyTooLargeError(tooLargeHelp);
   }
   return text;
@@ -2159,13 +2348,13 @@ export function getCommandHelp(command, { agent = "generic" } = {}) {
 }
 
 function createTopLevelHelp({ agent = "generic" } = {}) {
-  return `atlas-core - Atlas Core AXI\n\nUsage:\n  atlas-core\n  atlas-core <html-file> [--no-open] [--no-gate] [--reopen]\n  atlas-core poll <html-file> [--agent-reply "..."] [--agent-reply-file <path>]\n  atlas-core reply <html-file> (--agent-reply "..." | --agent-reply-file <path>)\n  atlas-core end <html-file>\n  atlas-core export <html-file> [--out <path>]\n  atlas-core share <html-file> [--private | --password <pw>] [--token <t>]\n  atlas-core share <html-file> --site <site_id> --update-key <key> [--private | --password <pw>]\n  atlas-core share --unpublish --site <site_id> --update-key <key>\n  atlas-core stop\n  atlas-core playbook [playbook_id]\n  atlas-core design\n  atlas-core setup hooks\n  atlas-core setup plugin\n\n${DESIGN_SYSTEM_HINT}\n\nNote: poll long-polls until the user sends feedback, ends the session, or leaves every review window disconnected past the reconnect grace period, staying silent while it waits - never kill it. Layout issues the browser detects are passive: they collect in the user's Layout issues inbox in the Atlas Core top bar and reach the agent only when the user selects them and queues the fixes, as an ordinary tag "layout-warnings" prompt. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. ${pollExecutionGuidance({ agent })} ${POLL_SEND_AND_END_RULE} Use \`atlas-core reply\` when handing a result back without waiting for more feedback: it exits 0 only after the server accepts the reply, so the review page stops showing Working. \`poll --agent-reply\` posts a reply and then keeps waiting.\n\n`;
+  return `atlas-core - Atlas Core AXI\n\nUsage:\n  atlas-core\n  atlas-core <html-file> [--no-open] [--no-gate] [--reopen]\n  atlas-core poll <html-file> [--owner <label>] [--takeover] [--agent-reply "..."] [--agent-reply-file <path>]\n  atlas-core reply <html-file> (--agent-reply "..." | --agent-reply-file <path>)\n  atlas-core end <html-file>\n  atlas-core export <html-file> [--out <path>]\n  atlas-core share <html-file> [--private | --password <pw>] [--token <t>]\n  atlas-core share <html-file> --site <site_id> --update-key <key> [--private | --password <pw>]\n  atlas-core share --unpublish --site <site_id> --update-key <key>\n  atlas-core stop\n  atlas-core playbook [playbook_id]\n  atlas-core design\n  atlas-core setup hooks\n  atlas-core setup plugin\n\n${DESIGN_SYSTEM_HINT}\n\nNote: poll long-polls until the user sends feedback, ends the session, or leaves every review window disconnected past the reconnect grace period, staying silent while it waits - never kill it. Layout issues the browser detects are passive: they collect in the user's Layout issues inbox in the Atlas Core top bar and reach the agent only when the user selects them and queues the fixes, as an ordinary tag "layout-warnings" prompt. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. ${pollExecutionGuidance({ agent })} ${POLL_SEND_AND_END_RULE} Use \`atlas-core reply\` when handing a result back without waiting for more feedback: it exits 0 only after the server accepts the reply, so the review page stops showing Working. \`poll --agent-reply\` posts a reply and then keeps waiting.\n\n`;
 }
 
 function createCommandHelp({ agent = "generic" } = {}) {
   return {
     open: `Usage: atlas-core <html-file> [--no-open] [--no-gate] [--reopen]\n\nOpen or resume an Atlas Core review session for an HTML artifact. Use --no-open when you need to ensure the server/session exists without opening another browser window. Use --no-gate to skip the open-time layout curtain for this browser open. If the user explicitly ended the session from the browser, this refuses to reopen it and returns guidance instead - pass --reopen to force it open when the user asks for further review or something important needs their visual attention. Sessions ended by the agent (\`atlas-core end\`) reopen normally without the flag.\n`,
-    poll: `Usage: atlas-core poll <html-file> [--agent-reply "..."] [--agent-reply-file <path>]\n\nThis command long-polls indefinitely for queued user prompts. It stays silent while it waits - that is normal, never kill it. Browser-detected layout issues do NOT return this poll: they are filed passively in the user's Layout issues inbox and arrive as an ordinary tag "layout-warnings" prompt only after the user selects them and queues the fixes. Warning lifecycle: an issue stays unresolved and counted while queued, becomes recurring if a newer artifact revision still shows it, and is resolved only after a newer artifact load plus a complete diagnostic pass at the same viewport no longer detects it. A failed or incomplete pass preserves it as unverified rather than clearing it. The only response that arrives without user action is artifact_failures - a fatal failure that made the review surface itself unusable. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. ${pollExecutionGuidance({ agent })} Use --agent-reply after applying prior feedback to display a concise response in Atlas Core before waiting again. When you are handing a result back and are not about to long-poll, run \`atlas-core reply <html-file> --agent-reply "..."\` instead: that command exits 0 only after the server accepts the reply, so the review page stops showing Working without this poll staying open. ${POLL_AGENT_REPLY_RULE} ${POLL_AGENT_REPLY_HELP_POINTER} Do not combine --agent-reply with --agent-reply-file.\n\nExamples:\n  atlas-core poll report.html --agent-reply "Renamed the payment step."\n  atlas-core poll report.html --agent-reply-file reply.md\n  atlas-core poll report.html --agent-reply-file -\n\n${POLL_SEND_AND_END_RULE}\n`,
+    poll: `Usage: atlas-core poll <html-file> [--owner <label>] [--takeover] [--agent-reply "..."] [--agent-reply-file <path>]\n\nThis command exclusively long-polls for queued user prompts. Pass --owner <label> to make the active listener visible in session listings; --takeover displaces an existing listener, which receives LISTENER_REPLACED. A second poll without --takeover fails with LISTENER_ACTIVE instead of silently returning waiting.\n\nThis command long-polls indefinitely for queued user prompts. It stays silent while it waits - that is normal, never kill it. Browser-detected layout issues do NOT return this poll: they are filed passively in the user's Layout issues inbox and arrive as an ordinary tag "layout-warnings" prompt only after the user selects them and queues the fixes. Warning lifecycle: an issue stays unresolved and counted while queued, becomes recurring if a newer artifact revision still shows it, and is resolved only after a newer artifact load plus a complete diagnostic pass at the same viewport no longer detects it. A failed or incomplete pass preserves it as unverified rather than clearing it. The only response that arrives without user action is artifact_failures - a fatal failure that made the review surface itself unusable. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. In a Herdr-managed pane, set ATLAS_CORE_HERDR_CHIME=1 to request attention when the poll has entered its waiting state; unset it or use any other value to keep the current silent behavior. Notification failures never interrupt the poll. ${pollExecutionGuidance({ agent })} Use --agent-reply after applying prior feedback to display a concise response in Atlas Core before waiting again. When you are handing a result back and are not about to long-poll, run `atlas-core reply <html-file> --agent-reply "..."` instead: that command exits 0 only after the server accepts the reply, so the review page stops showing Working without this poll staying open. ${POLL_AGENT_REPLY_RULE} ${POLL_AGENT_REPLY_HELP_POINTER} Do not combine --agent-reply with --agent-reply-file.\n\nExamples:\n  atlas-core poll report.html --agent-reply "Renamed the payment step."\n  atlas-core poll report.html --agent-reply-file reply.md\n  atlas-core poll report.html --agent-reply-file -\n\n${POLL_SEND_AND_END_RULE}\n`,
     reply: `Usage: atlas-core reply <html-file> (--agent-reply "..." | --agent-reply-file <path>)\n\nPost an agent reply to the open Atlas Core session and exit once the server confirms it was accepted. Exit 0 only when the server answers that the reply was sent, which is when the review page stops showing Working. If that answer does not arrive within ${AGENT_REPLY_RECEIPT_TIMEOUT_MS / 1000} seconds, exit non-zero with a timeout error. Use this when you are handing a result back and are not about to wait for more feedback.\n\nUse \`atlas-core poll <html-file> --agent-reply "..."\` instead when the reply should be followed by a long-poll. That command posts the reply and then keeps waiting, so it does not exit when the reply is accepted.\n\nPass exactly one of --agent-reply or --agent-reply-file. ${POLL_AGENT_REPLY_RULE} ${POLL_AGENT_REPLY_HELP_POINTER} Do not combine the two flags. An empty reply is refused.\n\nExamples:\n  atlas-core reply report.html --agent-reply "Renamed the payment step."\n  atlas-core reply report.html --agent-reply-file reply.md\n  atlas-core reply report.html --agent-reply-file -\n`,
     end: `Usage: atlas-core end <html-file>\n\nEnd an Atlas Core session as the agent. A session ended this way still reopens normally on the next \`atlas-core <html-file>\`, unlike a user ending it from the browser, which requires --reopen.\n`,
     export: `Usage: atlas-core export <html-file> [--out <path>]\n\nWrite a portable copy of an artifact: one HTML file with its LOCAL assets inlined (relative-path stylesheets, scripts, images, and fonts become inline <style>/<script> blocks and data URIs). Remote CDN/font references (https URLs) are left as links for the browser to load, so the file needs network to render those. Atlas Core makes no outbound requests - it only reads local files, confined to the artifact's directory. Defaults to writing <name>.export.html next to the source; pass --out to choose a path. The Atlas Core annotation SDK is never included in an export.\n`,

@@ -200,6 +200,16 @@ const layoutGateMaxHoldMs =
 let chromeOutdatedReason = "";
 let chromeOutdatedGeneration = 0;
 let outdatedReloadInFlight = false;
+// The live-event socket reconnects forever on a 5s cap. Silence there is indistinguishable from a
+// healthy idle stream, so a page whose server has gone away keeps rendering its last state and
+// tells the user nothing until they reload into a connection error. Past this many consecutive
+// failures the banner says so, with the health-probed reload the banner already offers.
+const LIVE_EVENT_UNREACHABLE_FAILURES = 5;
+let liveEventFailures = 0;
+// Only a banner this path raised may be hidden by this path: a `chrome-outdated` event means the
+// server was replaced, which a reconnect does not disprove.
+let unreachableBannerOwned = false;
+let unreachableDismissed = false;
 /** @type {{ selector: string, revision: number } | null} */
 let unrestorableDraftMiss = null;
 let retiredDrafts = loadRetiredDrafts();
@@ -980,12 +990,14 @@ function syncChat(chat, revision) {
 }
 
 function setAgentPresence(state) {
-  agentPresence = state === "listening" || state === "working" ? state : "waiting";
+  agentPresence = state === "listening" || state === "external" || state === "working" ? state : "waiting";
   updateSendState();
   renderSheetSummary();
   if (presenceBanner) presenceBanner.hidden = ended || agentPresence !== "waiting";
 
-  if (agentPresence !== "working") {
+  // A supervisor-owned process-only listener is busy on the agent's behalf. It must not make the
+  // composer look like an idle captain turn while the owning agent is offline.
+  if (agentPresence !== "working" && agentPresence !== "external") {
     if (workingBubble) workingBubble.remove();
     workingBubble = null;
     return;
@@ -1201,6 +1213,7 @@ function sheetSummary() {
   }
   if (unreadAgentReply) return { text: unreadAgentReply, accent: false, unread: true };
   if (agentPresence === "working") return { text: "Agent is working…", accent: false, unread: false };
+  if (agentPresence === "external") return { text: "External listener active", accent: false, unread: false };
   if (agentPresence === "listening") return { text: "Agent listening", accent: false, unread: false };
   return { text: "Agent not listening", accent: false, unread: false };
 }
@@ -2920,9 +2933,9 @@ async function replaceArtifactFrame({ recoveryRetry = false } = {}) {
     return false;
   };
   // Keep whatever is on screen, then try again later. A begin-load can fail for reasons that
-  // clear on their own - the shared server is mid-restart, or its handoff map was reset by that
-  // restart and this chrome's one re-handshake landed in the same outage window. Giving up here
-  // is what leaves the review permanently unloaded.
+  // clear on their own - the shared server is mid-restart, or a handoff no begin-load had yet
+  // persisted was lost with that restart and this chrome's one re-handshake landed in the same
+  // outage window. Giving up here is what leaves the review permanently unloaded.
   const recoverLater = () => {
     preservePreviousLoad();
     if (requestSequence !== artifactLoadRequestSequence || ended) return false;
@@ -4013,7 +4026,17 @@ endButton.onclick = () => {
 };
 handoffTakeoverButton.onclick = () => location.reload();
 if (outdatedReloadButton) outdatedReloadButton.onclick = () => reloadChromeForOutdatedBanner();
-if (outdatedDismissButton) outdatedDismissButton.onclick = () => setChromeOutdated(false);
+if (outdatedDismissButton) {
+  outdatedDismissButton.onclick = () => {
+    // A dismissed unreachable banner stays dismissed until the stream actually recovers; without
+    // this the next failed reconnect puts it straight back on screen.
+    if (unreachableBannerOwned) {
+      unreachableBannerOwned = false;
+      unreachableDismissed = true;
+    }
+    setChromeOutdated(false);
+  };
+}
 document.addEventListener("mousedown", (event) => {
   const target = /** @type {Node} */ (event.target);
   if (!moreMenu.hidden && !moreWrap.contains(target)) setMenuOpen(moreButton, moreMenu, false);
@@ -4078,6 +4101,12 @@ function connectLiveEvents() {
   const socket = new WebSocket(protocol + "//" + location.host + "/events/" + encodeURIComponent(key));
   socket.addEventListener("open", () => {
     eventReconnectDelayMs = 500;
+    liveEventFailures = 0;
+    unreachableDismissed = false;
+    if (unreachableBannerOwned) {
+      unreachableBannerOwned = false;
+      setChromeOutdated(false);
+    }
     refreshLayoutWarnings();
   });
   socket.addEventListener("message", (message) => {
@@ -4089,9 +4118,21 @@ function connectLiveEvents() {
     }
   });
   socket.addEventListener("close", () => {
+    liveEventFailures += 1;
+    noteLiveEventsUnreachable();
     setTimeout(connectLiveEvents, eventReconnectDelayMs);
     eventReconnectDelayMs = Math.min(eventReconnectDelayMs * 2, 5000);
   });
+}
+
+// Raise the existing banner once the stream has been down long enough to mean it, and never
+// against an ended session or a banner someone else owns. Reconnecting retires it.
+function noteLiveEventsUnreachable() {
+  if (liveEventFailures < LIVE_EVENT_UNREACHABLE_FAILURES) return;
+  if (ended || unreachableDismissed || unreachableBannerOwned) return;
+  if (outdatedBanner && !outdatedBanner.hidden) return;
+  unreachableBannerOwned = true;
+  setChromeOutdated(true, "");
 }
 
 events.set("reload", () => {
@@ -4117,7 +4158,7 @@ events.set("chat-sync", (data) => {
   rememberChatAckIds(data.ack_ids);
   syncChat(data.chat || [], data.chat_revision);
 });
-events.set("agent-presence", (data) => setAgentPresence(data.state));
+events.set("agent-presence", (data) => setAgentPresence(data.mode === "external-listener" ? "external" : data.state));
 events.set("layout-warnings", (data) => setLayoutWarnings(data.warnings || []));
 events.set("ended", () => markSessionEnded());
 connectLiveEvents();
