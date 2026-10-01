@@ -11,3 +11,6 @@ coverage/
 package-lock.json
 .no-mistakes/evidence/
 /.planning/
+
+# Local Git worktrees
+.worktrees/
