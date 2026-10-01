@@ -1994,7 +1994,10 @@ export function createServerSpawnOptions(logFd = null) {
  * @param {string} url
  * @param {{ retries?: number, retryDelayMs?: number, method?: string, headers?: Record<string, string>, body?: string, onResponse?: ((response: Response) => void) | null }} [options]
  */
-export async function fetchJson(url, { retries = 0, retryDelayMs = 250, method = "GET", headers, body, onResponse = null } = {}) {
+export async function fetchJson(
+  url,
+  { retries = 0, retryDelayMs = 250, method = "GET", headers, body, onResponse = null } = {},
+) {
   let response;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
@@ -2116,39 +2119,6 @@ function agentReplyReceiptTimeoutError(file, timeoutMs) {
       `Check the Atlas Core conversation for the reply before re-running \`atlas-core reply ${file}\`, so it is not posted twice`,
     ],
   );
-}
-
-/**
- * `poll --agent-reply` posts through the same endpoint as `reply`, which answers 409 once
- * the session has ended. Upstream's poll keeps posting through its atomic claim path, but
- * Atlas has no claim path yet, so a refused reply here only means the poll below will
- * report the ended session itself - swallow that one outcome and keep polling. Every other
- * failure (missing session, server error, unreachable server) still throws as before, and
- * the refused text stays undelivered: the ended guidance tells the agent to deliver
- * remaining updates directly in the conversation instead.
- *
- * @param {string} url
- * @param {string} text
- */
-async function postPollAgentReply(url, text) {
-  let response;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-  } catch {
-    throw serverConnectionError();
-  }
-  if (response.status === 409) {
-    const payload = await response.json().catch(() => null);
-    if (payload?.status === "ended") return null;
-  }
-  if (!response.ok) {
-    throw new AxiError(`Atlas Core request failed: ${response.status}`, "SERVER_ERROR");
-  }
-  return response.json();
 }
 
 function serverConnectionError() {
@@ -2354,7 +2324,7 @@ function createTopLevelHelp({ agent = "generic" } = {}) {
 function createCommandHelp({ agent = "generic" } = {}) {
   return {
     open: `Usage: atlas-core <html-file> [--no-open] [--no-gate] [--reopen]\n\nOpen or resume an Atlas Core review session for an HTML artifact. Use --no-open when you need to ensure the server/session exists without opening another browser window. Use --no-gate to skip the open-time layout curtain for this browser open. If the user explicitly ended the session from the browser, this refuses to reopen it and returns guidance instead - pass --reopen to force it open when the user asks for further review or something important needs their visual attention. Sessions ended by the agent (\`atlas-core end\`) reopen normally without the flag.\n`,
-    poll: `Usage: atlas-core poll <html-file> [--owner <label>] [--takeover] [--agent-reply "..."] [--agent-reply-file <path>]\n\nThis command exclusively long-polls for queued user prompts. Pass --owner <label> to make the active listener visible in session listings; --takeover displaces an existing listener, which receives LISTENER_REPLACED. A second poll without --takeover fails with LISTENER_ACTIVE instead of silently returning waiting.\n\nThis command long-polls indefinitely for queued user prompts. It stays silent while it waits - that is normal, never kill it. Browser-detected layout issues do NOT return this poll: they are filed passively in the user's Layout issues inbox and arrive as an ordinary tag "layout-warnings" prompt only after the user selects them and queues the fixes. Warning lifecycle: an issue stays unresolved and counted while queued, becomes recurring if a newer artifact revision still shows it, and is resolved only after a newer artifact load plus a complete diagnostic pass at the same viewport no longer detects it. A failed or incomplete pass preserves it as unverified rather than clearing it. The only response that arrives without user action is artifact_failures - a fatal failure that made the review surface itself unusable. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. In a Herdr-managed pane, set ATLAS_CORE_HERDR_CHIME=1 to request attention when the poll has entered its waiting state; unset it or use any other value to keep the current silent behavior. Notification failures never interrupt the poll. ${pollExecutionGuidance({ agent })} Use --agent-reply after applying prior feedback to display a concise response in Atlas Core before waiting again. When you are handing a result back and are not about to long-poll, run `atlas-core reply <html-file> --agent-reply "..."` instead: that command exits 0 only after the server accepts the reply, so the review page stops showing Working without this poll staying open. ${POLL_AGENT_REPLY_RULE} ${POLL_AGENT_REPLY_HELP_POINTER} Do not combine --agent-reply with --agent-reply-file.\n\nExamples:\n  atlas-core poll report.html --agent-reply "Renamed the payment step."\n  atlas-core poll report.html --agent-reply-file reply.md\n  atlas-core poll report.html --agent-reply-file -\n\n${POLL_SEND_AND_END_RULE}\n`,
+    poll: `Usage: atlas-core poll <html-file> [--owner <label>] [--takeover] [--agent-reply "..."] [--agent-reply-file <path>]\n\nThis command exclusively long-polls for queued user prompts. Pass --owner <label> to make the active listener visible in session listings; --takeover displaces an existing listener, which receives LISTENER_REPLACED. A second poll without --takeover fails with LISTENER_ACTIVE instead of silently returning waiting.\n\nThis command long-polls indefinitely for queued user prompts. It stays silent while it waits - that is normal, never kill it. Browser-detected layout issues do NOT return this poll: they are filed passively in the user's Layout issues inbox and arrive as an ordinary tag "layout-warnings" prompt only after the user selects them and queues the fixes. Warning lifecycle: an issue stays unresolved and counted while queued, becomes recurring if a newer artifact revision still shows it, and is resolved only after a newer artifact load plus a complete diagnostic pass at the same viewport no longer detects it. A failed or incomplete pass preserves it as unverified rather than clearing it. The only response that arrives without user action is artifact_failures - a fatal failure that made the review surface itself unusable. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. In a Herdr-managed pane, set ATLAS_CORE_HERDR_CHIME=1 to request attention when the poll has entered its waiting state; unset it or use any other value to keep the current silent behavior. Notification failures never interrupt the poll. ${pollExecutionGuidance({ agent })} Use --agent-reply after applying prior feedback to display a concise response in Atlas Core before waiting again. When you are handing a result back and are not about to long-poll, run \`atlas-core reply <html-file> --agent-reply "..."\` instead: that command exits 0 only after the server accepts the reply, so the review page stops showing Working without this poll staying open. ${POLL_AGENT_REPLY_RULE} ${POLL_AGENT_REPLY_HELP_POINTER} Do not combine --agent-reply with --agent-reply-file.\n\nExamples:\n  atlas-core poll report.html --agent-reply "Renamed the payment step."\n  atlas-core poll report.html --agent-reply-file reply.md\n  atlas-core poll report.html --agent-reply-file -\n\n${POLL_SEND_AND_END_RULE}\n`,
     reply: `Usage: atlas-core reply <html-file> (--agent-reply "..." | --agent-reply-file <path>)\n\nPost an agent reply to the open Atlas Core session and exit once the server confirms it was accepted. Exit 0 only when the server answers that the reply was sent, which is when the review page stops showing Working. If that answer does not arrive within ${AGENT_REPLY_RECEIPT_TIMEOUT_MS / 1000} seconds, exit non-zero with a timeout error. Use this when you are handing a result back and are not about to wait for more feedback.\n\nUse \`atlas-core poll <html-file> --agent-reply "..."\` instead when the reply should be followed by a long-poll. That command posts the reply and then keeps waiting, so it does not exit when the reply is accepted.\n\nPass exactly one of --agent-reply or --agent-reply-file. ${POLL_AGENT_REPLY_RULE} ${POLL_AGENT_REPLY_HELP_POINTER} Do not combine the two flags. An empty reply is refused.\n\nExamples:\n  atlas-core reply report.html --agent-reply "Renamed the payment step."\n  atlas-core reply report.html --agent-reply-file reply.md\n  atlas-core reply report.html --agent-reply-file -\n`,
     end: `Usage: atlas-core end <html-file>\n\nEnd an Atlas Core session as the agent. A session ended this way still reopens normally on the next \`atlas-core <html-file>\`, unlike a user ending it from the browser, which requires --reopen.\n`,
     export: `Usage: atlas-core export <html-file> [--out <path>]\n\nWrite a portable copy of an artifact: one HTML file with its LOCAL assets inlined (relative-path stylesheets, scripts, images, and fonts become inline <style>/<script> blocks and data URIs). Remote CDN/font references (https URLs) are left as links for the browser to load, so the file needs network to render those. Atlas Core makes no outbound requests - it only reads local files, confined to the artifact's directory. Defaults to writing <name>.export.html next to the source; pass --out to choose a path. The Atlas Core annotation SDK is never included in an export.\n`,

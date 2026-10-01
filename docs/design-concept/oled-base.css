@@ -1,0 +1,1406 @@
+/* ============================================================================
+   oled-base.css — camada portátil do sistema OLED Dark
+   Regra escrita: OLED-BASE-CONCEITO.md   ·   Gênero relatório: ESTILO-OLED-DARK.md
+
+   Importe. Nunca copie. O corpus original é distribuído por cópia e acumulou
+   ~40 divergências a mão entre dois documentos irmãos — foi assim que um
+   #d8a800 sem token entrou num semáforo verde/âmbar/vermelho.
+
+   Fontes (no <head>, antes desta folha):
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+   <meta name="color-scheme" content="dark">
+   ========================================================================== */
+
+@layer tokens, base, type, primitives, app, floor;
+
+/* ==========================================================================
+   1. TOKENS — o contrato. Nada de cor fora daqui.
+   ========================================================================== */
+@layer tokens {
+  :root {
+    color-scheme: dark;
+
+    /* --- rampa neutra: nove degraus, acromáticos (C=0), monotônicos em L -----
+     token         hex       L(oklch)  vs #000   papel
+     ---------------------------------------------------------------------- */
+    --void: #000000; /*  0.000    1.00   fundo da página. Nunca "quase preto". */
+    --surface: #080808; /*  0.134    1.05   plano de painel; hover de linha.      */
+    --surface-2: #101010; /*  0.173    1.10   CALHA: trilho de barra, campo.        */
+    --rule: #1b1b1b; /*  0.222    1.22   fio interno: divisória, borda.        */
+    --dim: #2a2a2a; /*  0.285    1.46   massa não destacada, grade de fundo.  */
+    --rule-2: #2e2e2e; /*  0.301    1.55   fio estrutural: abertura de bloco.    */
+    --ink-3: #787878; /*  0.573    4.76   terciária: rótulo, nota, metadado.    */
+    --ink-2: #a3a3a3; /*  0.716    8.33   secundária: corpo, célula.            */
+    --ink: #ffffff; /*  1.000   21.00   primária: dado, título, marcador.     */
+
+    /* [EMENDA] --ink-3 era #6a6a6a = 3,88:1 sobre #000 e 3,70:1 sobre --surface.
+     Reprova WCAG AA (4,5:1) e não qualifica como texto grande — o corpus usa
+     esse token a 10 / 10,5 / 11 / 11,5 / 12px. É toda a camada de NOMEAÇÃO da
+     interface: cabeçalho de tabela, selo, eyebrow, rótulo, nota, navegação,
+     rodapé. #787878 dá 4,76:1 e já existia no corpus (stroke do favicon).
+     Limite: contra --surface-2 dá 4,31:1 — logo texto dentro de calha
+     (placeholder, valor de campo) tem piso --ink-2, nunca --ink-3.          */
+    --hollow: #6a6a6a; /*  3,88:1 — SÓ papel não-textual: contorno de selo
+                            vazado, glifo desabilitado, marca de escala.
+                            Piso aplicável aqui é 3:1, e ele passa.          */
+
+    /* --- paleta categórica: cinco slots, ordem fixa, nunca ciclar ------------
+     Portão re-derivado: L em 0,48–0,67 · C >= 0,10 · dE protan/deutan >= 8
+     (9,5) · dE visão normal >= 15 (16,1) · WCAG >= 3:1.
+     Registre L/C/H junto do hex: sem isso ninguém RE-DERIVA um slot novo,
+     apenas testa um candidato às cegas.
+     slot  hex       L       C       H      vs #000
+     ---------------------------------------------------------------------- */
+    --c1: #ffffff; /* 1.000  0.000    89.9   21.00  série 1, sempre dominante   */
+    --c2: #f5451b; /* 0.644  0.218    33.9    5.75  série 2 E tinta de risco    */
+    --c3: #0091c8; /* 0.619  0.130   234.4    5.88                              */
+    --c4: #00a06b; /* 0.623  0.139   161.0    6.24                              */
+    --c5: #9463ff; /* 0.631  0.221   293.5    5.49                              */
+
+    /* c2..c5 são ISOLUMINANTES (dL 0,025). Distinguem-se por matiz e croma, não
+     por claridade — é exatamente por isso que o portão de dE é obrigatório e
+     "olhar" não substitui o cálculo.
+     --c1 é EXCEÇÃO DECLARADA: L=1,0 e C=0 estouram a faixa e o piso de croma
+     por definição. Aceita porque é o slot de maior contraste possível e é o
+     princípio do sistema. Todos os outros slots têm de passar.
+     A ordem ESCRITA é c1→c5. A ordem OPERANTE é c1→c3→c4→c5: --c2 fica sacado
+     da fila porque é a tinta de risco, e pintá-lo numa categoria neutra emite
+     alarme falso. A paleta efetivamente neutra tem QUATRO slots, não cinco.  */
+
+    --c2-rgb: 245 69 27; /* --c2 decomposto. Não é cor nova: é o que impede a
+                            tinta de risco de ser reescrita em decimal em cada
+                            call site (fio de botão destrutivo, campo inválido,
+                            painel de falha, borda de diálogo, riscadura).    */
+
+    /* --- aplicação semântica: Sunset Calm, nunca slots de série -------------
+     Tokens de aplicação carregam papel; --c1..--c5 permanecem dados.        */
+    --app-ink: #f8f4eb;
+    --app-ink-rgb: 248 244 235;
+    --app-feedback: #ffb386;
+    --app-feedback-rgb: 255 179 134;
+    --app-risk: #f87171;
+    --app-risk-rgb: 248 113 113;
+    --app-pending: #f2c14e;
+    --app-pending-rgb: 242 193 78;
+    --app-activity: #6fc7c2;
+    --app-activity-rgb: 111 199 194;
+
+    /* --- planos e camada ---------------------------------------------------- */
+    --veil: rgb(
+      0 0 0 / 0.72
+    ); /* Sob .72 a tinta primária cai para #474747 —
+                                entre --dim e --ink-3. O véu não escurece:
+                                SUBTRAI TINTA. É o único mecanismo disponível
+                                sobre luminância zero. Um por vez, jamais dois. */
+
+    /* --- métrica ------------------------------------------------------------ */
+    --max: 1180px; /* container único                          */
+    --rail: 92px; /* PARÂMETRO: trilho de marcação            */
+    --rail-nav: 236px; /* PARÂMETRO: trilho de navegação           */
+    --gut: 30px; /* gutter do grid de seção                  */
+    --bar-h: 58px; /* altura da barra fixa                     */
+    --stick: calc(
+      var(--bar-h) + 28px
+    ); /* âncora e sticky. Declara a relação
+                                          que no corpus era 86 fixado a mão.   */
+    --ctl-h: 40px; /* altura canônica de controle: 11+11 de
+                                      padding + line-box + 2px de fio          */
+    --tap: 44px; /* piso de alvo em pointer: coarse          */
+
+    /* --- z: escala fechada, por urgência. Nada acima de 95. ------------------ */
+    --z-bar: 50;
+    --z-progress: 60;
+    --z-menu: 70;
+    --z-layer: 80;
+    --z-toast: 88;
+    --z-tip: 90;
+    --z-veil: 94;
+    --z-dialog: 95;
+    /* O véu fica ACIMA do tooltip (94 > 90): o tooltip é fixed com
+     pointer-events:none e, mais baixo, pintaria por cima do diálogo. */
+
+    /* --- famílias ----------------------------------------------------------- */
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: "Archivo", ui-sans-serif, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+
+    /* Movimento: um literal, um call site, um kill-switch. Um token que governa
+     uma ocorrência não governa nada — por isso não há --dur. Permitido só se
+     informa (a) que algo apareceu ou (b) que um valor mudou.                  */
+  }
+
+  /* Tokens explicitamente RECUSADOS — se algum aparecer, alguém saiu do sistema:
+   --ok / --success (verde) .... confirmação não é identidade nem polaridade.
+                                 Concluído = selo SÓLIDO na tinta primária.
+   --warn (âmbar) .............. "atenção" é subida na rampa; "parcial" é hachura.
+   --shadow .................... elevação não existe sobre zero.
+   --radius-lg ................. o teto é 3px.                                */
+}
+
+/* ==========================================================================
+   2. BASE
+   ========================================================================== */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  * {
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--void);
+    color: var(--ink-2);
+    font: 400 15.5px/1.62 var(--sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* O dado entra como CANAL DECLARADO no markup (--w, --p, --mark), nunca como
+   estilo calculado. A folha continua dona de como o valor vira pixel, e cada
+   valor fica auditável na fonte, sem JavaScript. */
+  @property --w {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 0%;
+  }
+  @property --p {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 0%;
+  }
+
+  /* Âncora sob barra fixa. O corpus tem ZERO scroll-margin com barra de 58px e
+   navegação por âncora: cada clique deposita o título embaixo da barra. */
+  [id] {
+    scroll-margin-top: var(--stick);
+  }
+
+  ::selection {
+    background: var(--app-activity);
+    color: var(--void);
+  }
+
+  /* Nenhum controle usa a fonte do sistema operacional. Obrigatório, não higiene. */
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+  button {
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+
+  img,
+  svg,
+  video {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+}
+
+/* ==========================================================================
+   3. TIPOGRAFIA — duas famílias, três papéis.
+      O peso vem do EIXO VARIÁVEL, nunca de font-weight nativo.
+   ========================================================================== */
+@layer type {
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 400;
+    font-family: var(--sans);
+    color: var(--ink);
+  }
+
+  h1 {
+    font-variation-settings:
+      "wdth" 112,
+      "wght" 680;
+    font-size: clamp(38px, 6.1vw, 76px);
+    line-height: 0.97;
+    letter-spacing: -0.035em;
+    max-width: 18ch;
+  }
+  h2 {
+    font-variation-settings:
+      "wdth" 106,
+      "wght" 620;
+    font-size: clamp(25px, 3.3vw, 39px);
+    line-height: 1.07;
+    letter-spacing: -0.028em;
+    max-width: 26ch;
+  }
+  h3 {
+    font-variation-settings:
+      "wdth" 100,
+      "wght" 620;
+    font-size: 16px;
+  }
+
+  b,
+  strong {
+    font-variation-settings:
+      "wdth" 100,
+      "wght" 620;
+    font-weight: 400;
+    color: var(--ink);
+  }
+
+  p {
+    max-width: 62ch;
+  } /* medida em ch, jamais em px: o limite é caractere */
+
+  /* --- RÓTULO: mono, caixa alta, tracking escalonado inversamente ao tamanho
+       e ao grau de solenidade: abertura > etiqueta > coluna > nav > selo ---- */
+  .kicker {
+    font: 500 10.5px var(--mono);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .label {
+    font: 500 10.5px var(--mono);
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .note {
+    font: 400 11.5px/1.6 var(--mono);
+    color: var(--ink-3);
+    max-width: 68ch;
+  }
+  .lede {
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 58ch;
+  }
+
+  /* --- DADO: todo número é mono e tabular. Sem exceção. ------------------- */
+  .num,
+  td.num,
+  .u-num {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Número grande migra para a sans expandida — mas continua tabular. */
+  .num--display {
+    font-family: var(--sans);
+    font-variation-settings:
+      "wdth" 108,
+      "wght" 640;
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(30px, 4vw, 46px);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+  }
+
+  /* Quando o slot de número recebe uma FRASE, ele troca de família: a mono é
+   reservada ao que é medida. A recíproca vale. */
+  .num--prose {
+    font-family: var(--sans);
+    font-variant-numeric: normal;
+  }
+
+  /* Link: sublinhado por fio, nunca text-decoration nem azul — azul seria um
+   sexto acento e colidiria com --c3. */
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  a.link {
+    border-bottom: 1px solid var(--rule-2);
+    color: var(--ink-2);
+  }
+  a.link:hover {
+    border-bottom-color: var(--ink);
+    color: var(--ink);
+  }
+}
+
+/* ==========================================================================
+   4. PRIMITIVAS — o vocabulário de forma. Um porte para outro meio (TUI,
+      slide, papel, nativo) reimplementa estas doze coisas e nada mais.
+   ========================================================================== */
+@layer primitives {
+  /* --- 1. PLANO: três níveis + um sub-nível. Fio, nunca elevação. ---------- */
+  .shell {
+    width: min(var(--max), 100% - 40px);
+    margin-inline: auto;
+  }
+
+  .sec {
+    padding-top: 96px;
+  }
+  .block {
+    margin-top: 36px;
+  }
+
+  .bare {
+    border-top: 1px solid var(--rule-2);
+    padding-top: 18px;
+  } /* NU     */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 24px;
+  } /* PAINEL */
+  .panel--mark {
+    border-top: 2px solid var(--ink);
+  } /* MARCADO */
+  .panel--risk {
+    border-top: 2px solid rgb(var(--c2-rgb) / 0.34);
+  }
+  .panel--risk > .panel-title {
+    color: var(--c2);
+  }
+  .trough {
+    background: var(--surface-2);
+    border-radius: 2px;
+  } /* CALHA  */
+
+  /* Grid de seção com trilho. minmax(0,1fr) + min-width:0 — DUAS travas, não uma:
+   `1fr` é `minmax(auto,1fr)` e o min-content de uma tabela estica a coluna. */
+  .sec-grid {
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    gap: 0 var(--gut);
+  }
+  .sec-grid > *,
+  .cols > * {
+    min-width: 0;
+  }
+  .cols {
+    display: grid;
+    gap: var(--gut);
+    align-items: start;
+  } /* start: sem
+              isso o painel curto estica e sobra preto morto no fim */
+  .cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* --- 2/3. FIO e MARCADOR ------------------------------------------------
+   Dois pesos: 1px = divisória, 2px = marcador.
+   Três tintas: --rule (interno) · --rule-2 (estrutural) ·
+                --ink-3 (FRONTEIRA DE ELEMENTO INTERATIVO) [EMENDA].
+   --rule-2 dá 1,55:1 e reprova o piso de 3:1 do WCAG 1.4.11 — e essa borda é
+   com frequência o ÚNICO indicador de onde clicar. Interatividade tem piso
+   legal que estrutura não tem.
+   O marcador é RACIONADO: no máximo UM por região visível. */
+  .rail {
+    border-top: 2px solid var(--ink);
+    padding-top: 4px;
+    width: 34px;
+    position: sticky;
+    top: var(--stick);
+    font: 500 12px var(--mono);
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+  }
+
+  /* --- 5/6. RÓTULO e DADO em par ------------------------------------------ */
+  .kv-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .kv-row:last-child {
+    border-bottom: 0;
+  }
+  .kv-row > :last-child {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    text-align: right;
+  }
+
+  .panel-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  /* --- 7. MARCA: trilho quase invisível, preenchimento ancorado no zero ----
+   Base reta e ancorada, ponta arredondada em 3px. O destaque se justifica por
+   ENTIDADE, jamais por posição no ranking: se a cor seguisse o ranking,
+   reordenar repintaria o gráfico e a cor deixaria de significar. */
+  .bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px;
+    gap: 4px 12px;
+    align-items: center;
+    padding: 7px 0;
+  }
+  .bar-name {
+    font-size: 13.5px;
+    color: var(--ink-2);
+  }
+  .bar-val {
+    font: 500 13px var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    text-align: right;
+  }
+  .bar-track {
+    grid-column: 1 / -1;
+    position: relative;
+    height: 10px;
+    background: var(--surface-2);
+    border-radius: 2px;
+  }
+  .bar-fill {
+    height: 100%;
+    width: var(--w);
+    background: var(--ink);
+    border-radius: 0 3px 3px 0;
+  }
+  .bar-fill--dim {
+    background: var(--dim);
+  }
+  .bar-fill--risk {
+    background: var(--c2);
+  }
+
+  /* Guardrail: prazo, meta, limiar. Tracejado branco vertical sobre o trilho.
+   position:relative no trilho é obrigatório — sem ele o snippet não ancora. */
+  .bar-track[data-mark]::after {
+    content: "";
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    left: var(--mark);
+    width: 1px;
+    background: repeating-linear-gradient(180deg, var(--ink) 0 3px, transparent 3px 6px);
+  }
+
+  /* Empilhada: o gap de 2px é o PRÓPRIO FUNDO fazendo de separador — resolve
+   sozinho boa parte dos casos de daltonismo, sem gastar cor. */
+  .stack {
+    display: flex;
+    gap: 2px;
+    height: 50px;
+  }
+  .seg {
+    border-radius: 2px;
+  }
+
+  /* --- 8. CÉLULA CONTÁVEL: vazio é contorno (custo zero de luz), aceso é
+       preenchimento. Serve para nota discreta, régua de tempo, etapas,
+       seleção, paginação. */
+  .meter {
+    display: flex;
+    gap: 3px;
+  }
+  .meter i {
+    flex: 1;
+    height: 12px;
+    border-radius: 1px;
+    box-shadow: inset 0 0 0 1px var(--rule-2);
+  }
+  .meter i.on {
+    background: var(--ink);
+    box-shadow: none;
+  }
+  .meter i.mid {
+    background: var(--dim);
+    box-shadow: none;
+  }
+  .meter i.weak {
+    background: var(--c2);
+    box-shadow: none;
+  }
+
+  /* --- 10. LEGENDA: gramática de três partes, invariável.
+       afirmação · definição do universo · afirmação.
+       É também a forma canônica do ESTADO VAZIO. */
+  .legend {
+    display: grid;
+    gap: 4px;
+    margin-top: 12px;
+    font: 400 11.5px/1.6 var(--mono);
+    color: var(--ink-3);
+  }
+  .legend > b {
+    color: var(--ink-2);
+    font-variation-settings: normal;
+  }
+
+  /* --- 11. SELO DE EVIDÊNCIA — o elemento-assinatura.
+       Grau de prova é TEXTURA ACROMÁTICA, não cor: sobrevive a preto-e-branco
+       e a qualquer visão de cor, e devolve os cinco slots de cor aos dados.
+       Declare a legenda UMA vez; repita o selo em cada bloco.
+       A única variante colorida é polaridade — risco não é grau de prova. */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font: 500 10px var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .tag i {
+    width: 8px;
+    height: 8px;
+    display: block;
+    flex: none;
+  }
+
+  .tag--fact i {
+    background: var(--ink);
+  } /* SÓLIDO   */
+  .tag--proxy i {
+    background: repeating-linear-gradient(45deg, var(--ink) 0 1.5px, transparent 1.5px 3px);
+    box-shadow: inset 0 0 0 1px var(--rule-2);
+  } /* HACHURA  */
+  .tag--model i {
+    box-shadow: inset 0 0 0 1px var(--hollow);
+  } /* VAZADO   */
+  .tag--risk {
+    color: var(--c2);
+  }
+  .tag--risk i {
+    background: var(--c2);
+  } /* POLARIDADE */
+
+  /* --- 12. INVERSÃO: tinta e fundo trocam de lugar. O realce MÁXIMO do sistema,
+       disponível porque o fundo é o piso do gamut. Não é um estilo — é o teto
+       da escada. Por isso é escasso como o marcador. */
+  .invert {
+    background: var(--ink);
+    color: var(--void);
+  }
+}
+
+/* ==========================================================================
+   5. APLICAÇÃO — o que o relatório não tinha.
+   ========================================================================== */
+@layer app {
+  /* --- 5.1 AÇÃO: hierarquia sem preenchimento colorido ---------------------
+   O parente mais próximo no corpus é o chip. Uma primária por faixa de ação. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: var(--ctl-h);
+    padding: 0 16px;
+    border-radius: 2px;
+    font: 500 11px var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    background: none;
+    border: 1px solid transparent;
+  }
+  .btn--primary {
+    background: var(--app-ink);
+    color: var(--void);
+    border-color: var(--app-ink);
+  }
+  .btn--primary:hover {
+    box-shadow: inset 0 0 0 1px var(--void);
+  } /* anel interno:
+    brightness() em branco puro é INERTE, e em tinta clipa canal e desloca matiz
+    para fora do valor validado. O multiplicador é lei só sobre preenchimento de
+    marca de dado, onde existe para preservar a identidade da série. */
+  .btn--secondary {
+    border-color: var(--ink-3);
+  }
+  .btn--secondary:hover {
+    border-color: var(--app-activity);
+    color: var(--app-activity);
+  }
+  .btn--tertiary:hover {
+    color: var(--app-feedback);
+  }
+  .btn--danger {
+    border-color: rgb(var(--app-risk-rgb) / 0.34);
+    color: var(--app-risk);
+  }
+  .btn--danger:hover {
+    border-color: var(--app-risk);
+  }
+
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    cursor: not-allowed;
+    background: none;
+    color: var(--ink-3);
+    border-color: var(--rule);
+    /* Descer a RAMPA. Nunca opacity: sobre #000 alfa dilui para o nada — some,
+     não recua. Nunca pointer-events:none em <button>: mata cursor e title. */
+  }
+
+  /* Ocupado sem spinner: o que se move é o NÚMERO, não a forma. Reescrever
+   textContent não é transição, então sobrevive intacto a reduced-motion. */
+  .btn[aria-busy="true"] {
+    position: relative;
+  }
+  .btn[aria-busy="true"]::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 1px;
+    width: var(--p, 100%);
+    background: var(--app-pending);
+  }
+
+  /* --- 5.2 ENTRADA: o campo é uma CALHA, não um cartão --------------------- */
+  .field {
+    display: grid;
+    gap: 6px;
+  }
+  .field > label {
+    font: 500 10.5px var(--mono);
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  /* Rótulo sempre visível ACIMA do campo. Zero floating label: exigiria
+   transição, e a transição não existe. O placeholder é exemplo de FORMATO,
+   nunca o nome do campo. */
+
+  .input,
+  input[type="text"],
+  input[type="email"],
+  input[type="number"],
+  input[type="search"],
+  input[type="password"],
+  textarea,
+  select {
+    width: 100%;
+    min-height: var(--ctl-h);
+    padding: 11px 12px;
+    background: var(--surface-2);
+    color: var(--app-ink);
+    border: 1px solid var(--ink-3);
+    border-radius: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  textarea {
+    min-height: 96px;
+    resize: vertical;
+  }
+  select {
+    appearance: none;
+    padding-right: 34px;
+    /* seta: gradiente-TEXTURA, não decoração. É o gradiente permitido. */
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+      linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+    background-size:
+      5px 5px,
+      5px 5px;
+    background-position:
+      calc(100% - 18px) 52%,
+      calc(100% - 13px) 52%;
+    background-repeat: no-repeat;
+  }
+  select option {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+
+  ::placeholder {
+    color: var(--ink-2);
+    opacity: 1;
+  }
+  /* Piso --ink-2 dentro de calha: --ink-3 sobre --surface-2 dá 4,31:1. */
+
+  /* Validação não é semáforo. Dispare em :user-invalid, NUNCA em :invalid —
+   :invalid casa com todo campo obrigatório vazio na carga e o formulário
+   nasce vermelho, que é o semáforo na forma mais agressiva.
+   Cor só no fio de 1px, na tinta da mensagem e no selo de 8px. Nunca fundo
+   tingido: tint sobre #000 gera marrom/roxo sujo e cria um quarto plano.
+   UMA polaridade por bloco. */
+  .input:user-invalid,
+  [aria-invalid="true"] {
+    border-color: var(--app-risk);
+  }
+  .field-msg {
+    font: 400 11.5px var(--mono);
+    color: var(--ink-3);
+  }
+  .field-msg--error {
+    color: var(--app-risk);
+  }
+
+  /* Obrigatório é marca TIPOGRÁFICA em tinta primária, declarada uma vez na
+   legenda do formulário. Nunca vermelho: campo obrigatório vazio não é erro. */
+  .req::after {
+    content: " *";
+    color: var(--ink);
+  }
+
+  /* Toggle: comutador SEGMENTADO. Pílula deslizante exigiria raio > 3px e
+   transição de transform — ambos proibidos. Legível em preto-e-branco. */
+  .switch {
+    display: inline-flex;
+    border: 1px solid var(--ink-3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .switch > button {
+    padding: 0 12px;
+    min-height: var(--ctl-h);
+    font: 500 10.5px var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .switch > button[aria-pressed="true"] {
+    background: var(--app-activity);
+    color: var(--void);
+  }
+
+  /* --- 5.3 NAVEGAÇÃO: o item ativo não ganha fundo, pílula, nem acento.
+       Promove o fio de 1px para 2px na tinta primária e sobe a tinta.
+       É .panel--mark girado para o eixo da lista.
+       aria-current é a FONTE DE VERDADE, consumida direto pelo CSS: o estado
+       tem de sobreviver à impressão e ao leitor de tela. Nunca uma classe
+       .active paralela. */
+  .bar-top {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-bar);
+    min-height: var(--bar-h);
+    display: flex;
+    align-items: center;
+    background: var(--veil);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--rule);
+  }
+  /* Sem "elevate on scroll" — é a assinatura do AppBar do Material com o fio no
+   lugar da sombra. O fio é permanente; o blur já diz que há conteúdo abaixo. */
+
+  .nav {
+    display: flex;
+    gap: 22px;
+  }
+  .nav a {
+    padding: 6px 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font: 500 10.5px var(--mono);
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .nav a:hover {
+    color: var(--ink-2);
+  } /* hover resolve SÓ na rampa de tinta */
+  .nav a[aria-current] {
+    color: var(--app-activity);
+    border-bottom-color: var(--app-activity);
+  }
+
+  .nav--vert a {
+    border-bottom: 0;
+    border-left: 2px solid var(--rule-2);
+    padding: 6px 0 6px 12px;
+  }
+  .nav--vert a[aria-current] {
+    border-left-color: var(--app-activity);
+  }
+  /* Repouso com 2px na tinta ESTRUTURAL reserva o espaço: zero reflow ao ativar. */
+
+  .crumbs {
+    font: 400 11.5px var(--mono);
+    color: var(--ink-3);
+  }
+  .crumbs > * + *::before {
+    content: " / ";
+  }
+  .crumbs [aria-current] {
+    color: var(--ink);
+  }
+  /* Barra, não chevron: o corpus já escreve hierarquia com barra. O ponto médio
+   fica reservado a metadado paralelo. O nível corrente nunca trunca.
+   O separador HERDA --ink-3: token de fio como tinta de texto dá 1,55:1 e o
+   glifo sumiria em vez de recuar (R05). A hierarquia sai da promoção do nível
+   corrente para a tinta primária, não do rebaixamento do separador. */
+
+  /* Skip-link obrigatório, primeiro nó focável. transform, nunca display:none —
+   display:none o tiraria da ordem de foco. */
+  .skip {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: var(--z-veil);
+    padding: 10px 14px;
+    border-radius: 2px;
+    background: var(--ink);
+    color: var(--void);
+    font: 500 11px var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transform: translateY(-200%);
+  }
+  .skip:focus {
+    transform: none;
+  }
+
+  /* --- 5.4 DADO DENSO: a tabela é o ESTADO NATURAL do sistema ------------- */
+  .table-wrap {
+    overflow-x: auto;
+    border-top: 1px solid var(--rule-2);
+  }
+  .table-wrap table {
+    min-width: 560px;
+  } /* rebaixe por tabela, inline */
+
+  th {
+    font: 500 10px var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    text-align: left;
+    white-space: nowrap;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--rule);
+  }
+  td {
+    padding: 10px 12px;
+    font-size: 13.5px;
+    color: var(--ink-2);
+    border-bottom: 1px solid var(--rule);
+  }
+  /* Zebra é PROIBIDA: cria um quarto plano fora da rampa e compete com o hover,
+   que já ocupa o degrau --surface. Separação é o fio de 1px em border-bottom,
+   e apenas ele — sem border-left/right, que nivelaria tudo em grade de planilha. */
+  td.num,
+  th.num {
+    text-align: right;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  td:empty::after {
+    content: "—";
+    color: var(--ink-3);
+    font-family: var(--mono);
+  } /* ausência é travessão, nunca
+                    célula em branco — e mono, para não quebrar a coluna */
+
+  tbody tr:hover td {
+    background: var(--surface);
+  }
+  tr[aria-selected="true"] td:first-child {
+    box-shadow: inset 2px 0 0 var(--app-activity);
+  }
+  /* Colisão desfeita: hover fica com o degrau de superfície; seleção usa o
+   marcador lateral de 2px. Se ambos pintassem --surface, seriam indistinguíveis. */
+  tr.is-total td {
+    border-top: 1px solid var(--rule-2);
+    color: var(--ink);
+    border-bottom: 0;
+  }
+
+  thead.is-stuck th {
+    position: sticky;
+    top: var(--bar-h);
+    background: var(--void);
+    box-shadow: inset 0 -1px 0 var(--rule);
+  }
+  /* Fundo é o próprio --void, não uma superfície nova. O fio vira inset porque
+   border-collapse descarta borda em elemento sticky. Sem sombra. */
+
+  th[aria-sort] button::after {
+    content: " ↑";
+    color: var(--ink-3);
+    font-family: var(--mono);
+  }
+  th[aria-sort="descending"] button::after {
+    content: " ↓";
+  }
+  th[aria-sort]:not([aria-sort="none"]) {
+    color: var(--ink);
+    box-shadow: inset 0 -2px 0 var(--ink);
+  }
+
+  /* Ações de linha SEMPRE visíveis em tinta terciária. Nunca opacity:0 até o
+   hover: teclado não tem hover, e sobre #000 opacidade não é estado, é
+   desaparecimento. */
+  .row-act {
+    color: var(--ink-3);
+  }
+  tr:hover .row-act,
+  .row-act:hover {
+    color: var(--ink);
+  }
+
+  /* --- 5.5 SOBREPOSIÇÃO: o véu não escurece, APAGA --------------------------
+   Sobre preto não há o que escurecer; o que a página tem a perder é tinta.
+   Zero sombra. A folha NÃO clareia para parecer elevada: fica na mesma
+   superfície de painel do corpo. Quem separa é o véu por baixo e o fio.  */
+  .veil {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-veil);
+    background: var(--veil);
+  }
+  /* Um véu por vez. Dois somam alfa e a página vai a preto absoluto, apagando
+   o contexto que o véu existe para preservar. Modal sobre modal é proibido:
+   a segunda pergunta substitui a primeira ou vira etapa. */
+
+  .dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto; /* NUNCA transform para centralizar:
+     transform cria bloco de contenção e todo position:fixed descendente —
+     menu, popover — sai errado. */
+    z-index: var(--z-dialog);
+    width: min(560px, 100% - 40px);
+    height: max-content;
+    max-height: 84vh;
+    overflow: auto;
+    overscroll-behavior: contain;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 2px solid var(--ink); /* aresta de ENTRADA carrega o marcador */
+    border-radius: 3px;
+    padding: 24px;
+  }
+  .drawer {
+    position: fixed;
+    inset: 0 0 0 auto;
+    margin: 0;
+    height: 100%;
+    width: min(420px, 100%);
+    border-radius: 0;
+    border: 0;
+    border-left: 2px solid var(--ink);
+  }
+  /* Perímetro completo só onde há plano vizinho a separar: nas bordas coladas à
+   viewport um fio de 1px não separa nada. A gaveta é o bloco marcado em escala
+   de tela — marcação lateral, não caixa flutuante.
+   Use <dialog> e o atributo inert no conteúdo por baixo: travar o foco por JS e
+   apagar visualmente não basta — sem inert, o rotor do leitor de tela atravessa
+   o documento inteiro por trás do véu. */
+
+  .menu {
+    position: absolute;
+    z-index: var(--z-menu);
+    min-width: 180px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 4px;
+  }
+  .menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 9px 12px;
+    border-radius: 2px;
+    font-size: 13.5px;
+    color: var(--ink-2);
+  }
+  .menu button:hover {
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+  /* Sem bico e sem seta no popover: o que conecta dois blocos neste sistema é o
+   alinhamento de borda, não um conector desenhado. */
+
+  .tip {
+    position: fixed;
+    z-index: var(--z-tip);
+    pointer-events: none;
+    padding: 6px 9px;
+    border-radius: 3px;
+    background: var(--ink);
+    color: var(--void); /* inversão */
+    font: 500 11px var(--mono);
+    font-variant-numeric: tabular-nums;
+    opacity: 0;
+    transition: opacity 0.1s linear;
+  }
+  .tip.on {
+    opacity: 1;
+  }
+  /* O tooltip precisa de TECLADO. Em grade densa com célula truncada, o tooltip
+   É o dado: delegue focusin/focusout além de pointerover/pointermove, e dê
+   tabindex="0" ao alvo. E suprima o tooltip enquanto houver véu — ele é fixed
+   e pintaria por cima do diálogo. */
+
+  /* --- 5.6 RETORNO, STATUS E VAZIO ---------------------------------------
+   Aplicação usa tokens semânticos, mas nunca depende só de cor: o rótulo,
+   ícone/forma e contagem permanecem obrigatórios em cada estado. */
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font: 500 10px var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .status::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    flex: none;
+  }
+  .status--done {
+    color: var(--app-activity);
+  }
+  .status--done::before {
+    background: var(--app-activity);
+  }
+  .status--pending,
+  .status--running {
+    color: var(--app-pending);
+  }
+  .status--pending::before,
+  .status--running::before {
+    border: 1px dashed var(--app-pending);
+  }
+  .status--idle::before {
+    box-shadow: inset 0 0 0 1px var(--hollow);
+  }
+  .status--fail {
+    color: var(--app-risk);
+  }
+  .status--fail::before {
+    background: var(--app-risk);
+  }
+
+  /* O ÚNICO círculo do sistema, UMA instância por tela: a semântica é
+   literalmente "ligado". */
+  .led {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--app-activity);
+  }
+  .led--down {
+    background: var(--app-risk);
+  }
+  .led--wait {
+    background: none;
+    box-shadow: inset 0 0 0 1px var(--hollow);
+  }
+
+  /* Alerta inline: marcação lateral. Três níveis. Prosa permanece na tinta de
+   leitura — o fundo NUNCA colore. */
+  .alert {
+    border-left: 1px solid var(--rule-2);
+    padding-left: 14px;
+  }
+  .alert--read {
+    border-left-width: 2px;
+    border-left-color: var(--app-feedback);
+  }
+  .alert--risk {
+    border-left-width: 2px;
+    border-left-color: var(--app-risk);
+  }
+
+  .toast {
+    position: fixed;
+    z-index: var(--z-toast);
+    right: 20px;
+    bottom: 20px;
+    max-width: 380px;
+    padding: 12px 16px;
+    border-radius: 3px;
+    background: var(--ink);
+    color: var(--void);
+    border-left: 2px solid var(--void);
+  }
+  .toast--risk {
+    border-left-color: var(--app-risk);
+  }
+  .comment,
+  .review,
+  .author {
+    color: var(--app-feedback);
+  }
+  .queue,
+  .pending,
+  .attention {
+    color: var(--app-pending);
+  }
+  /* O aviso NUNCA é o único canal: o erro passa a existir permanentemente no
+   bloco afetado, com código e horário em mono tabular.
+   Regiões vivas são IRMÃS e planas (uma polite, uma assertive), nunca
+   aninhadas — role="alert" dentro de role="status" anuncia duas vezes ou
+   engole o anúncio. */
+
+  /* Indeterminado: trilho CHEIO, preenchimento AUSENTE — a extensão existe,
+   nada foi capturado. Mais o tempo decorrido em mono tabular. Sem spinner,
+   sem shimmer, sem barra varrendo: "animação que não informa nada". */
+  .busy {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .busy .bar-track {
+    flex: 1;
+  }
+  .busy time {
+    font: 500 12px var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+  }
+
+  /* Esqueleto: o instrumento em estado ZERO. O rótulo NUNCA é esqueleto — já é
+   conhecido antes da requisição. Sem retângulo cinza com shimmer. */
+  .skeleton .num::after {
+    content: "—";
+    color: var(--ink-3);
+  }
+
+  /* Vazio: superfície nua + instrumento em zero + legenda de três partes + ação.
+   Sem ilustração, sem mascote, sem "Nada por aqui ainda!".
+   Um gráfico que só sabe desenhar sucesso mente por omissão. */
+  .empty {
+    border-top: 1px solid var(--rule-2);
+    padding: 28px 0;
+    display: grid;
+    gap: 12px;
+  }
+}
+
+/* ==========================================================================
+   6. PISO DE QUALIDADE — não anuncie, só entregue.
+   ========================================================================== */
+@layer floor {
+  /* Foco: uma única regra global. Zero :focus, :active, :visited. */
+  :focus-visible {
+    outline: 2px solid var(--app-activity);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+  .table-wrap :focus-visible,
+  .dialog :focus-visible {
+    outline-offset: -2px;
+  }
+  /* Offset positivo é recortado por contêiner rolável. */
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+  /* É defesa contra o autor futuro, não contra o atual. */
+
+  /* Piso de alvo de toque, sem inflar a caixa desenhada. */
+  @media (pointer: coarse) {
+    .btn,
+    .nav a,
+    .menu button,
+    .row-act {
+      position: relative;
+    }
+    .btn::before,
+    .nav a::before,
+    .menu button::before,
+    .row-act::before {
+      content: "";
+      position: absolute;
+      inset: 50% auto auto 50%;
+      width: max(100%, var(--tap));
+      height: max(100%, var(--tap));
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  /* forced-colors (Alto Contraste do Windows) apaga box-shadow E
+   background-image — ou seja, apagaria o sistema de evidência INTEIRO:
+   hachura, vazado, célula de medidor, seta de select. É a lacuna de
+   acessibilidade mais grave depois do contraste. Aqui ela é fechada
+   transportando a textura para border-style, que sobrevive. */
+  @media (forced-colors: active) {
+    .tag i,
+    .status::before,
+    .meter i {
+      forced-color-adjust: none;
+      border: 1px solid CanvasText;
+      background: Canvas;
+      box-shadow: none;
+    }
+    .tag--fact i,
+    .status--done::before,
+    .meter i.on {
+      background: CanvasText;
+    }
+    .tag--proxy i,
+    .status--running::before,
+    .meter i.mid {
+      border-style: dashed;
+    }
+    .tag--model i,
+    .status--idle::before {
+      border-style: dotted;
+    }
+    .panel,
+    .dialog,
+    .menu {
+      border: 1px solid CanvasText;
+    }
+    .nav a[aria-current] {
+      border-bottom: 2px solid Highlight;
+    }
+    select {
+      background-image: none;
+    }
+  }
+
+  /* @media print inverte OS TOKENS NEUTROS E APENAS ELES. Os slots categóricos
+   não são redefinidos: foram validados contra fundo escuro e carregam
+   identidade. Componente cuja marca é box-shadow:inset recebe hex literal —
+   muitos motores de impressão descartam inset. */
+  @media print {
+    :root {
+      --void: #fff;
+      --surface: #fff;
+      --surface-2: #fff;
+      --rule: #ddd;
+      --rule-2: #999;
+      --dim: #bbb;
+      --ink: #000;
+      --ink-2: #333;
+      --ink-3: #666;
+      --hollow: #666;
+      /* Estados continuam compreensíveis por rótulo, forma e contagem; estas
+       substituições impedem que os pastéis de tela virem tinta fraca no papel. */
+      --app-ink: #000;
+      --app-feedback: #333;
+      --app-risk: #000;
+      --app-pending: #333;
+      --app-activity: #000;
+      --veil: transparent;
+    }
+    body {
+      background: #fff;
+      color: #000;
+      font-size: 11pt;
+    }
+
+    /* Toda camada interativa desaparece: papel não tem ponteiro nem rolagem, e
+     um modal impresso mostra uma pergunta congelada fingindo ser conteúdo. */
+    .bar-top,
+    .tip,
+    .veil,
+    .dialog,
+    .drawer,
+    .menu,
+    .toast,
+    .skip {
+      display: none !important;
+    }
+
+    .tag--model i,
+    .status--idle::before,
+    .meter i {
+      box-shadow: none;
+      border: 1px solid #666;
+    }
+    .bar-fill,
+    .seg,
+    .meter i.on,
+    .tag--fact i {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .table-wrap {
+      overflow: visible;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tr,
+    .panel {
+      break-inside: avoid;
+    }
+    p,
+    li {
+      orphans: 3;
+      widows: 3;
+    }
+    a.link::after {
+      content: " (" attr(href) ")";
+      font: 400 9pt var(--mono);
+      color: #666;
+    }
+  }
+
+  /* Toda primitiva NOVA é inscrita em duas listas: a utilitária de mono (se
+   numérica ou de rótulo) e o bloco @media print. Componente não inscrito
+   desaparece no papel ou cai na sans. */
+}
+
+/* ==========================================================================
+   7. RESPONSIVO
+   ========================================================================== */
+@media (max-width: 900px) {
+  .sec-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rail {
+    position: static;
+    width: auto;
+    margin-bottom: 12px;
+  }
+  .cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .shell {
+    width: min(var(--max), 100% - 28px);
+  }
+  .sec {
+    padding-top: 68px;
+  }
+  .cols-2,
+  .cols-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .panel {
+    padding: 18px;
+  }
+  .stack {
+    height: 38px;
+  }
+}

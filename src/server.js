@@ -746,8 +746,9 @@ export async function serve({
   });
 
   async function publishAgentReply(key, text) {
-    const session = await store.addAgentReply(key, text);
+    const session = await store.addAgentReply(key, text, { requireOpen: true });
     if (!session) return null;
+    if (session.status === "ended") return session;
     const lastEntry = session.chat?.at(-1);
     const entry = serializeChat([
       lastEntry?.role === "agent" ? lastEntry : { role: "agent", text, at: session.updated_at },

@@ -334,9 +334,8 @@ test("reply refuses user-ended and agent-ended sessions without changing the tra
         const after = chromeSessionData(await fetch(`${base}/session/${key}`).then((response) => response.text()));
         assert.deepEqual(after.initialChat, before.initialChat);
 
-        // Atlas posts `poll --agent-reply` through the same endpoint (no upstream claim
-        // path yet), so the ended session refuses that text too - but the poll itself
-        // still reports the ended session instead of crashing on the 409.
+        // The atomic poll claim refuses replies to ended sessions too, while the poll
+        // still reports the ended session instead of changing its transcript.
         const poll = await runCli(["poll", artifact, "--agent-reply", "Poll reply refused.", "--timeout-ms", "0"], {
           env,
         });

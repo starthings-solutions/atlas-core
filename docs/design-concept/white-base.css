@@ -1,0 +1,81 @@
+/* white-base.css — White Mode do sistema de instrumentos.
+   Importe esta folha no lugar de oled-base.css; ela carrega a base comum.
+   Contrato: WHITE-BASE-CONCEITO.md. Use <meta name="color-scheme" content="light">.
+   Os tokens claros são próprios: cores do tema dark não são invertidas por filtro. */
+@import url("./oled-base.css");
+
+@layer tokens {
+  :root {
+    color-scheme: light;
+    --void: #ffffff;
+    --surface: #f8f8f8;
+    --surface-2: #f0f0f0;
+    --rule: #e4e4e4;
+    --dim: #c8c8c8;
+    --rule-2: #b8b8b8;
+    --ink-3: #626262; /* 6.10:1 sobre branco; 5.35:1 sobre calha. */
+    --ink-2: #454545; /* 9.59:1 sobre branco; 8.41:1 sobre calha. */
+    --ink: #111111; /* 18.88:1 sobre branco; 16.57:1 sobre calha. */
+    --hollow: #767676;
+    --c1: #111111; /* 18.88:1 sobre branco; 16.57:1 sobre calha. */
+    --c2: #b82d12; /* 6.14:1 sobre branco; 5.38:1 sobre calha. */
+    --c3: #006f98; /* 5.63:1 sobre branco; 4.94:1 sobre calha. */
+    --c4: #00754f; /* 5.74:1 sobre branco; 5.04:1 sobre calha. */
+    --c5: #7040c8; /* 6.45:1 sobre branco; 5.66:1 sobre calha. */
+    --app-ink: #26221d; /* 15.80:1 sobre branco; 13.87:1 sobre calha. */
+    --app-feedback: #9a4b16; /* 6.19:1 sobre branco; 5.43:1 sobre calha. */
+    --app-risk: #b42318; /* 6.57:1 sobre branco; 5.77:1 sobre calha. */
+    --app-pending: #7b5d08; /* 6.16:1 sobre branco; 5.40:1 sobre calha. */
+    --app-activity: #146e69; /* 6.06:1 sobre branco; 5.32:1 sobre calha. */
+    --c2-rgb: 184 45 18;
+    --app-ink-rgb: 38 34 29;
+    --app-feedback-rgb: 154 75 22;
+    --app-risk-rgb: 180 35 24;
+    --app-pending-rgb: 123 93 8;
+    --app-activity-rgb: 20 110 105;
+    --veil: rgb(255 255 255 / 0.88);
+    --backdrop: rgb(17 17 17 / 0.32);
+    --on-risk: #ffb4ab;
+  }
+}
+
+@layer base {
+  ::selection {
+    background: var(--app-activity);
+    color: var(--void);
+  }
+}
+
+@layer primitives {
+  /* Massa de fundo não é tinta de dado: as marcas secundárias mantêm 3:1. */
+  .bar-fill--dim,
+  .bar-fill.dimmed,
+  .meter i.mid {
+    background: var(--hollow);
+  }
+}
+
+@layer app {
+  /* Cromo translúcido claro; diálogo escurece o contexto por um token próprio. */
+  .veil {
+    background: var(--backdrop);
+  }
+  .btn--danger {
+    border-color: var(--app-risk);
+  }
+  /* Feedback sobre superfícies invertidas exige tinta clara. */
+  .toast--risk {
+    border-left-color: var(--on-risk);
+  }
+  .invert {
+    --app-risk: var(--on-risk);
+  }
+}
+
+@layer floor {
+  @media print {
+    :root {
+      color-scheme: light;
+    }
+  }
+}
