@@ -40,3 +40,15 @@ last-verified: a2a199cd2275ab4d5cea1b94d42e2479bda36321
 
 - `ae66e1a` feat(cli): add a reply command with server acceptance receipt (#392) — portado em `d7aea2e`: new `atlas-core reply` command (receipt via `postAgentReply`, 10s `AGENT_REPLY_RECEIPT_TIMEOUT_MS`, `SESSION_ENDED` on 409), `POST /api/:key/agent-reply` 409s ended sessions (`addAgentReply` `requireOpen`), reply/poll help + home/open/feedback guidance, skill pointer, README rows, `test/cli-reply.test.js`. ADAPTAÇÕES after rebase onto merged PRs #1–#4: (1) `poll --agent-reply` uses the atomic `POST /api/poll` claim from PR #2 (`publishAgentReply`) rather than a pre-poll `postPollAgentReply` to the receipt endpoint; (2) `board` → `review page` in CLI strings; (3) presence modes from PR #2 are present; (4) the `docs/invariants.md` hunk was folded into the matching `AGENTS.md` line (that file does not exist here); the README skill-stub sentence hunk had no Atlas counterpart and was skipped.
 - `a2a199c` chore(main): release lavish-axi 0.1.80 (#393) — pulado: release-please (`CHANGELOG.md`, version bump), never portable
+
+## 2026-10-01 — fechamento das lacunas do motor
+
+- Referência permanece `a2a199cd2275ab4d5cea1b94d42e2479bda36321` (Lavish 0.1.80).
+- `2430a3f` — porte concluído: handler HTTP mantido após listen, registro fatal no bootstrap e regressões de log/saída.
+- `edc0607` — porte concluído: loopback obrigatório e primeiro, recuperação `pendingBinds` no processo, avisos/URLs/allowlist dinâmicos, descoberta paralela em interfaces locais, identidade `state_id`/`state_dir`, controle de duplicados e PID por endereço, preservação via `--also-listen`, nomes DNS pendentes e presença de home/hooks pela descoberta limitada.
+- Endurecimento após revisão: revalidação da instalação em leituras novas e antes de SIGTERM, header `Atlas-State-Id` conferido no shutdown, e prazo absoluto na sondagem de ownership de loopback; as respectivas regressões falharam antes das correções.
+- Adaptações mantidas: nomes e variáveis Atlas, porta 4397, distribuição por clone local, fontes/visual OLED e recusa de `poll --agent-reply` após encerramento.
+- Legenda de revisões (`b4e82c6`) e cópia de resposta no playbook (`f4ed5ff`) permanecem diferenças de produto fora deste porte de runtime.
+- A auditoria original continua preservada em `docs/lavish-engine-audit-2026-10-01.md`; a resolução e a validação deste porte estão registradas ao final dela.
+
+- Validação final: check completo aprovado (1.375 testes, zero falhas, nove opcionais não executados; skill/plugin atualizados) e revisão independente aprovada.

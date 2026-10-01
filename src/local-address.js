@@ -1,11 +1,40 @@
 import os from "node:os";
 
-// Loopback is local by definition (RFC 1122 section 3.2.1.3, RFC 4291 section 2.5.3), so answer
-// without consulting interface enumeration: where enumeration is unavailable the lookup below
-// throws and the catch would wrongly report loopback as absent. Atlas adaptation - upstream
-// enumerates unconditionally; this only differs where enumeration throws, from wrong to right.
-// Every other host keeps the fail-closed answer, which stays load-bearing: a recovery signal for
-// an address that never came back would restart the server on every CLI invocation.
+import { isWildcardHost } from "./paths.js";
+
+// Every concrete address on this machine's interfaces that a Atlas server could be listening on.
+// A server pinned to a Tailscale or LAN address by one agent's ATLAS_CORE_HOST is invisible to a
+// CLI that only dials its own configured host and loopback, so discovery also sweeps these before
+// concluding nothing is running on the port. IPv6 link-local addresses need a zone to be dialed
+// and are skipped. Older Node releases report `family` as a number.
+/**
+ * @param {Record<string, Array<{ address?: string, family?: string | number, internal?: boolean }> | undefined>} [interfaces]
+ * @returns {string[]}
+ */
+export function localInterfaceAddresses(interfaces = safeNetworkInterfaces()) {
+  const addresses = [];
+  for (const entries of Object.values(interfaces || {})) {
+    for (const entry of entries || []) {
+      const address = typeof entry?.address === "string" ? entry.address : "";
+      if (!address || isWildcardHost(address)) continue;
+      const family = entry.family === 4 ? "IPv4" : entry.family === 6 ? "IPv6" : entry.family;
+      if (family !== "IPv4" && family !== "IPv6") continue;
+      if (family === "IPv6" && /^fe[89ab]/i.test(address)) continue;
+      if (!addresses.includes(address)) addresses.push(address);
+    }
+  }
+  return addresses;
+}
+
+function safeNetworkInterfaces() {
+  try {
+    return os.networkInterfaces();
+  } catch {
+    return {};
+  }
+}
+
+// Loopback remains local even when the OS cannot enumerate its interfaces.
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1"]);
 
 export function isLocalAddressPresent(host) {

@@ -9,7 +9,16 @@ import {
   hostForUrl,
   LOOPBACK_HOST,
   linkHost,
+  resolveListenHosts,
 } from "../src/paths.js";
+
+test("a pinned host retains loopback and inherited listeners for shared CLI discovery", () => {
+  assert.deepEqual(resolveListenHosts({ env: { ATLAS_CORE_HOST: "100.64.0.1" }, extraHosts: ["192.168.1.10"] }), [
+    "100.64.0.1",
+    LOOPBACK_HOST,
+    "192.168.1.10",
+  ]);
+});
 
 test("defaultPort uses the Atlas Core port, distinct from upstream Lavish", () => {
   assert.equal(defaultPort(), 4397);

@@ -1,5 +1,7 @@
 # Auditoria do motor Atlas Core × Lavish — 01/10/2026
 
+> Registro histórico do diagnóstico anterior ao porte. As cinco lacunas do motor foram tratadas na atualização descrita em “Resolução após a auditoria”, ao final deste documento.
+
 Resultado: o núcleo de revisão está preservado, mas o motor não tem paridade
 integral com o Lavish atual. O marcador `last-verified` registra a revisão do
 upstream; não significa que todas as mudanças foram incorporadas.
@@ -84,3 +86,17 @@ e confirmação de que skill/plugin gerados estão atualizados.
 
 Os arquivos White Mode em [design-concept/](design-concept/) são uma referência
 portátil de design; não alteram o tema do chrome nem o motor.
+
+## Resolução após a auditoria
+
+O porte de `2430a3f` e do restante de `edc0607` fecha as cinco lacunas de runtime acima: erros HTTP após listen, falhas fatais no bootstrap, recuperação de bind no processo, descoberta/identidade da instalação e presença após fallback. A referência permanece Lavish `a2a199c`.
+
+Foram adicionados os dois testes upstream de durabilidade, a suíte de descoberta de servidores e regressões de presença com host indisponível e primário que aceita conexão sem responder. O teste de loopback com host fixado falhou antes do porte; os dois testes de presença também falharam usando a leitura anterior de um único endereço. As verificações usam portas efêmeras e diretórios de estado próprios.
+
+A fidelidade aqui é do motor e dos contratos portados. A legenda de revisões, o playbook de cópia de resposta e os temas continuam sendo diferenças de produto deliberadas; a proteção adicional de replies após encerramento permanece no Atlas.
+
+A revisão independente identificou mais dois casos no porte upstream: identidade da instalação pode mudar entre descoberta e controle; um `/health` que envia bytes continuamente não respeita timeout por inatividade. O Atlas agora revalida a identidade em leituras novas e no fallback de sinal, confere `Atlas-State-Id` no shutdown e usa prazo absoluto na sondagem de ownership. O fallback captura os PIDs antes da última leitura de health e recusa sinais se esse conjunto mudar. Seis regressões cobrem troca de instalação no stop/reconcile/SIGTERM, rejeição no endpoint, resposta que goteja e troca real de PID durante a última leitura de health; os casos correspondentes falharam antes das correções.
+
+Validação final: o pipeline completo `pnpm run check` passou com build, lint, formatação, tipos, 1.375 testes aprovados, zero falhas, nove testes opcionais não executados e skill/plugin gerados atualizados. A revisão independente aprovou o porte após verificar as correções de identidade, PID e timeout.
+
+A rodada com três CPUs teve uma única falha preexistente de tempo no teste de Markdown: 1179 ms frente ao limite de 1000 ms. A execução final limitou a afinidade a duas CPUs, fazendo o runner executar arquivos em sequência, e passou integralmente. Nenhum limiar nem implementação de Markdown foi alterado. As verificações de execução usaram somente portas efêmeras e diretórios de estado de teste.

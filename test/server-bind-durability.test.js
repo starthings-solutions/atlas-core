@@ -145,9 +145,9 @@ test("a stale control-channel server is replaced only once per CLI invocation", 
   });
 });
 
-test("a server that cannot bind a control-channel address closes every listener and fails", async () => {
+test("an occupied loopback control address prevents binding another listener", async () => {
   await withTempDir(async (dir) => {
-    const squatter = createServer();
+    const squatter = createServer((socket) => socket.destroy());
     await new Promise((resolve) => squatter.listen({ port: 0, host: "127.0.0.1" }, () => resolve(undefined)));
     const occupiedPort = /** @type {{ port: number }} */ (squatter.address()).port;
     try {
@@ -163,7 +163,7 @@ test("a server that cannot bind a control-channel address closes every listener 
         }),
         (error) => {
           assert.ok(error instanceof Error);
-          assert.match(error.message, /control-channel address/);
+          assert.match(error.message, /Loopback .* already in use/);
           return true;
         },
       );
@@ -182,7 +182,7 @@ test("a server that cannot bind a control-channel address closes every listener 
 test("an occupied requested address does not report network_stale after loopback fallback", async () => {
   await withTempDir(async (dir) => {
     const occupiedHost = "::1";
-    const squatter = createServer();
+    const squatter = createServer((socket) => socket.destroy());
     await new Promise((resolve, reject) => {
       squatter.once("error", reject);
       squatter.listen({ port: 0, host: occupiedHost }, () => resolve(undefined));
@@ -259,7 +259,7 @@ test("a bind that cannot succeed anywhere still fails loudly and names the cause
   await withTempDir(async (dir) => {
     // Occupy loopback so even the fallback has nowhere to go: the retry must terminate and the
     // failure must still surface, rather than the loop spinning or swallowing the reason.
-    const squatter = createServer();
+    const squatter = createServer((socket) => socket.destroy());
     await new Promise((resolve) => squatter.listen({ port: 0, host: "127.0.0.1" }, () => resolve(undefined)));
     const occupiedPort = /** @type {{ port: number }} */ (squatter.address()).port;
     try {
@@ -275,9 +275,10 @@ test("a bind that cannot succeed anywhere still fails loudly and names the cause
         }),
         (error) => {
           assert.ok(error instanceof Error);
-          assert.match(error.message, /failed to bind any address/);
-          // The cause has to survive: "failed to bind" with no errno is undiagnosable in server.log.
-          assert.match(error.message, /EADDRINUSE/);
+          assert.match(error.message, /Loopback .* already in use/);
+          // The original bind error must remain inspectable for crash diagnostics.
+          assert.ok(error.cause instanceof Error && "code" in error.cause);
+          assert.equal(error.cause.code, "EADDRINUSE");
           return true;
         },
       );
@@ -451,7 +452,7 @@ test("a clean detached-server shutdown exits 0 without an error in server.log", 
 
 test("a detached server crash writes a timestamped line to server.log", async () => {
   await withTempDir(async (dir) => {
-    const squatter = createServer();
+    const squatter = createServer((socket) => socket.destroy());
     await new Promise((resolve) => squatter.listen({ port: 0, host: "127.0.0.1" }, () => resolve(undefined)));
     const occupiedPort = /** @type {{ port: number }} */ (squatter.address()).port;
     const logFile = path.join(dir, "server.log");
@@ -513,6 +514,7 @@ test("the control channel finds a fallen-back server on loopback", async () => {
       assert.deepEqual(server.hosts, ["127.0.0.1"]);
       const output = await withEnv(
         {
+          ATLAS_CORE_STATE_DIR: dir,
           ATLAS_CORE_PORT: String(server.port),
           ATLAS_CORE_HOST: UNBINDABLE_HOST,
         },
@@ -546,6 +548,7 @@ test(
         const started = Date.now();
         const output = await withEnv(
           {
+            ATLAS_CORE_STATE_DIR: dir,
             ATLAS_CORE_PORT: String(port),
             ATLAS_CORE_HOST: "::1",
           },
@@ -574,6 +577,7 @@ test(
       try {
         const output = await withEnv(
           {
+            ATLAS_CORE_STATE_DIR: dir,
             ATLAS_CORE_PORT: String(port),
             ATLAS_CORE_HOST: "::1",
           },

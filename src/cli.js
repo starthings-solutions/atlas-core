@@ -10,6 +10,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { access, readFile, writeFile } from "node:fs/promises";
+import { get as httpGet } from "node:http";
+import { isIP } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,14 +33,18 @@ import {
   publishToHtmlApp,
   updateHtmlApp,
 } from "./html-app.js";
+import { localInterfaceAddresses } from "./local-address.js";
 import {
   clientHost,
   defaultPort,
   ensureStateDir,
   hostForUrl,
+  isWildcardHost,
   LOOPBACK_HOST,
+  resolveConcreteListenHosts,
   serverLogFile,
   stateFile,
+  stateId,
 } from "./paths.js";
 import {
   computeVsCodePluginLocationsUpdate,
@@ -336,11 +342,16 @@ export function createOpenOutput({
   const selfPaintPrefix = selfPaintWarning
     ? `First fix the unpainted page surface flagged in self_paint_warning and save - Atlas Core live-reloads the artifact automatically, so you do not need to re-run \`atlas-core ${file}\`. `
     : "";
+  // A failed bind is invisible to the person holding a review link at that address - the page
+  // simply does not load - so the agent is told to pass it on rather than leave it in a field.
+  const networkPrefix = networkWarning
+    ? "Atlas could not serve every address it was asked to (see network_warning): when you next message the user, tell them, because review links at that address will not load until it clears. "
+    : "";
   return {
     session: { file, url, status },
     ...(networkWarning ? { network_warning: networkWarning } : {}),
     ...(selfPaintWarning ? { self_paint_warning: selfPaintWarning } : {}),
-    next_step: `${selfPaintPrefix}Do not respond to the user just yet. Now you must run \`atlas-core poll ${file}\`. This command long-polls until the user sends feedback, ends the session, or leaves every review window disconnected past the reconnect grace period, and it stays silent the whole time - that is normal, never kill it. Layout issues the browser detects do not return this poll; they wait in the user's Layout issues inbox until the user queues them, then arrive as an ordinary tag "layout-warnings" prompt. Do not pass --timeout-ms during normal agent use. ${pollExecutionGuidance({ agent })} After applying feedback, run \`atlas-core poll ${file} --agent-reply "<message for the user>"\` without --timeout-ms to show a concise response in Atlas Core and keep waiting for more feedback. If instead you are handing back a result without starting another long-poll, run \`atlas-core reply ${file} --agent-reply "<message for the user>"\` to get an acceptance receipt. ${POLL_AGENT_REPLY_RULE} ${POLL_AGENT_REPLY_NEXT_POINTER} If the user ends the session, stop polling and do not reopen it by re-running \`atlas-core ${file}\` unless the user asks for further review or something genuinely important needs their visual attention - deliver routine updates directly in this conversation instead. When reopening is warranted, run \`atlas-core ${file} --reopen\`.`,
+    next_step: `${networkPrefix}${selfPaintPrefix}Do not respond to the user just yet. Now you must run \`atlas-core poll ${file}\`. This command long-polls until the user sends feedback, ends the session, or leaves every review window disconnected past the reconnect grace period, and it stays silent the whole time - that is normal, never kill it. Layout issues the browser detects do not return this poll; they wait in the user's Layout issues inbox until the user queues them, then arrive as an ordinary tag "layout-warnings" prompt. Do not pass --timeout-ms during normal agent use. ${pollExecutionGuidance({ agent })} After applying feedback, run \`atlas-core poll ${file} --agent-reply "<message for the user>"\` without --timeout-ms to show a concise response in Atlas Core and keep waiting for more feedback. If instead you are handing back a result without starting another long-poll, run \`atlas-core reply ${file} --agent-reply "<message for the user>"\` to get an acceptance receipt. ${POLL_AGENT_REPLY_RULE} ${POLL_AGENT_REPLY_NEXT_POINTER} If the user ends the session, stop polling and do not reopen it by re-running \`atlas-core ${file}\` unless the user asks for further review or something genuinely important needs their visual attention - deliver routine updates directly in this conversation instead. When reopening is warranted, run \`atlas-core ${file} --reopen\`.`,
   };
 }
 
@@ -1250,7 +1261,10 @@ export async function stopCommand(args) {
   const port = Number(flagValue(args, "--port") || defaultPort());
   // A server that fell back to loopback answers there rather than at the requested bind host, and
   // a `stop` that only dials the requested host reports "not-running" while leaving it running.
-  const { baseUrl } = await findRunningServer(port);
+  // A same-port duplicate at another address is this installation's server too, so it stops as well.
+  const { baseUrl, duplicates, foreign } = await findRunningServer(port);
+  if (foreign) throw otherInstallationError(port, foreign);
+  await stopDuplicateServers(duplicates, { reason: "stop" });
   return shutdownServerOnPort(port, { baseUrl, currentVersion: VERSION });
 }
 
@@ -1262,21 +1276,26 @@ export async function shutdownServerOnPort(
     fetchHealth: healthFetcher = fetchHealth,
     requestShutdown: shutdownRequester = requestShutdown,
     waitForPortFree: portFreeWaiter = waitForPortFree,
-    killProcessOnPort: portKiller = killProcessOnPort,
-    processMatchesAtlas = processOnPortMatchesAtlas,
+    killServerProcess = /** @type {(baseUrl: string) => boolean | Promise<boolean>} */ (killAtlasListener),
+    processMatchesAtlas = listenerMatchesAtlas,
   } = {},
 ) {
   const health = await healthFetcher(baseUrl);
   if (!health) {
     return { server: { status: "not-running", port } };
   }
-  if (!(await canControlServerOnPort(port, health, processMatchesAtlas))) {
+  if (!(await canControlServerOnPort(baseUrl, health, processMatchesAtlas))) {
     return { server: { status: "not-atlas", port } };
   }
   await shutdownRequester(baseUrl, { reason: "stop" });
   let freed = await portFreeWaiter(baseUrl, 3000);
   if (!freed && shouldKillProcessOnPort(currentVersion, health)) {
-    portKiller(port);
+    const latest = await healthFetcher(baseUrl);
+    if (!latest || !(await canControlServerOnPort(baseUrl, latest, processMatchesAtlas))) {
+      return { server: { status: "stopping", port } };
+    }
+    if (!shouldKillProcessOnPort(currentVersion, latest)) return { server: { status: "stopping", port } };
+    if (!(await killServerProcess(baseUrl))) throw unidentifiedListenerError(baseUrl);
     freed = await portFreeWaiter(baseUrl, 3000);
   }
   return { server: { status: freed ? "stopped" : "stopping", port } };
@@ -1675,7 +1694,13 @@ function deepEqual(a, b) {
 async function serverCommand(args) {
   const port = Number(flagValue(args, "--port") || defaultPort());
   const debug = args.includes("--verbose") || process.env.ATLAS_CORE_DEBUG === "1";
-  const server = await serve({ port, stateFile: stateFile(), version: VERSION, debug });
+  const server = await serve({
+    port,
+    stateFile: stateFile(),
+    version: VERSION,
+    debug,
+    extraListenHosts: flagValues(args, "--also-listen"),
+  });
   await server.done;
   return "";
 }
@@ -1683,11 +1708,7 @@ async function serverCommand(args) {
 async function visibleSessions() {
   const store = new SessionStore(stateFile());
   const sessions = (await store.listSessions()).filter((session) => session.status !== "ended");
-  // Adaptation: upstream reads this through findRunningServer (multi-URL control-channel
-  // discovery from lavish c5bdea4, still unmerged here in PR #1). Probe the single local
-  // base URL instead; switch to findRunningServer once that port lands.
-  const baseUrl = `http://${hostForUrl(clientHost())}:${defaultPort()}`;
-  const health = await fetchHealth(baseUrl);
+  const { health } = await findRunningServer(defaultPort());
   const listeners = new Map(
     Array.isArray(health?.listeners)
       ? health.listeners
@@ -1715,66 +1736,203 @@ function isHtmlPath(file) {
   return file.toLowerCase().endsWith(".html") || file.toLowerCase().endsWith(".htm");
 }
 
-// A server that could not bind its requested address falls back to loopback (see `serve()`), so
-// the control channel has to look there too. Without this the CLI reports "did not start" for a
-// server that IS running, and the next invocation spawns a duplicate daemon beside it.
-function serverBaseUrls(port) {
-  const urls = [`http://${hostForUrl(clientHost())}:${port}`];
-  const loopback = `http://${hostForUrl(LOOPBACK_HOST)}:${port}`;
-  if (!urls.includes(loopback)) urls.push(loopback);
-  return urls;
+const HEALTH_PROBE_TIMEOUT_MS = 500;
+const DEFAULT_HEALTH_TIMEOUT_MS = 2000;
+const MAX_HEALTH_BODY_BYTES = 256 * 1024;
+// A reconcile asks the server to re-detect Tailscale and retry any unbound address before
+// answering, which can take longer than a plain health read.
+const HEALTH_RECONCILE_TIMEOUT_MS = 3000;
+
+// Every address an Atlas server on this port could be answering at, in preference order: the host
+// this CLI is configured for, loopback, then every other local interface address. Agents on one
+// machine do not share ATLAS_CORE_HOST, and a CLI that only dialed its own host (plus loopback)
+// concluded nothing was running while a server pinned to the tailnet address held the port, then
+// spawned a second daemon beside it on the same port and the same state file.
+function serverCandidateHosts() {
+  const hosts = [clientHost(), LOOPBACK_HOST];
+  for (const address of localInterfaceAddresses()) {
+    if (!hosts.includes(address)) hosts.push(address);
+  }
+  return hosts;
 }
 
-const HEALTH_PROBE_TIMEOUT_MS = 500;
+function serverBaseUrl(host, port) {
+  return `http://${hostForUrl(host)}:${port}`;
+}
 
-// Returns where an Atlas Core server actually answered. Each candidate probe is bounded so a hanging
-// requested address cannot mask loopback, and a response whose app is atlas-core wins over a
-// foreign /health. When nothing answers, the primary URL is still returned so callers have
-// something to spawn against and report.
+// A server is this installation's when it reports our state file. One from before `state_id`
+// existed (0.1.77 and older) cannot say, so it counts as ours only at an address this CLI controls -
+// its configured host or loopback - where replacing it is the upgrade path; anywhere else it may
+// belong to another installation and is never adopted or stopped.
+function isOwnedServer(entry, controlHosts) {
+  if (entry.health.app !== "atlas-core") return false;
+  if (typeof entry.health.state_id === "string") return entry.health.state_id === stateId();
+  return controlHosts.has(entry.host);
+}
+
+// Another installation's Atlas server at an address this CLI controls is never used, replaced, or
+// stopped: its sessions and state file are not ours.
+function otherInstallationError(port, foreign) {
+  const dir = typeof foreign.health.state_dir === "string" ? foreign.health.state_dir : "an unknown state directory";
+  return new AxiError(
+    `Port ${port} is served by another Atlas installation at ${foreign.host} (state directory ${dir})`,
+    "SERVER_ERROR",
+    [`Set ATLAS_CORE_PORT to another port, or set ATLAS_CORE_STATE_DIR to ${dir} to use that installation`],
+  );
+}
+
+// Returns where an Atlas server actually answered, plus any OTHER Atlas daemon of this
+// installation found on the same port at an address the chosen one does not serve. Every candidate
+// is probed in parallel and each probe is bounded, so a hanging or foreign address cannot mask
+// loopback, and a response whose app is atlas-core wins over a foreign /health. When nothing
+// answers, the primary URL is still returned so callers have something to spawn against and report.
 async function findRunningServer(port, { reconcileNetwork = false } = {}) {
-  const candidates = serverBaseUrls(port);
-  let foreign = null;
-  for (const baseUrl of candidates) {
-    const health = await probeHealth(baseUrl, { reconcileNetwork, timeoutMs: HEALTH_PROBE_TIMEOUT_MS });
-    if (!health) continue;
-    if (health.app === "atlas-core") return { baseUrl, health };
-    if (!foreign) foreign = { baseUrl, health };
+  const controlHosts = new Set([clientHost(), LOOPBACK_HOST]);
+  const probed = await Promise.all(
+    serverCandidateHosts().map(async (host) => {
+      const baseUrl = serverBaseUrl(host, port);
+      const health = await probeHealth(baseUrl, { reconcileNetwork: false, timeoutMs: HEALTH_PROBE_TIMEOUT_MS });
+      return health ? { host, baseUrl, health } : null;
+    }),
+  );
+  const found = probed.filter((entry) => entry !== null);
+  const owned = found.filter((entry) => isOwnedServer(entry, controlHosts));
+  const foreign =
+    found.find(
+      (entry) =>
+        controlHosts.has(entry.host) && entry.health.app === "atlas-core" && !isOwnedServer(entry, controlHosts),
+    ) ?? null;
+  const chosen = owned[0];
+  if (!chosen) {
+    const other = found.find((entry) => controlHosts.has(entry.host));
+    return other
+      ? { baseUrl: other.baseUrl, health: other.health, duplicates: [], foreign }
+      : { baseUrl: serverBaseUrl(clientHost(), port), health: null, duplicates: [], foreign };
   }
-  return foreign ?? { baseUrl: candidates[0], health: null };
+  let health = chosen.health;
+  if (reconcileNetwork) {
+    health =
+      (await probeHealth(chosen.baseUrl, { reconcileNetwork: true, timeoutMs: HEALTH_RECONCILE_TIMEOUT_MS })) ?? health;
+  }
+  assertServerOwnership(chosen.baseUrl, health);
+  return { baseUrl: chosen.baseUrl, health, duplicates: ownedDuplicates(owned, chosen), foreign };
+}
+
+// Other Atlas daemons of this installation on the same port. An address the chosen server itself
+// reports as bound is the chosen server, not a duplicate. A server too old to report its addresses
+// is about to be replaced by version, so every other address is retired with it: an old daemon left
+// holding loopback would otherwise make the upgraded server refuse to start.
+function ownedDuplicates(owned, chosen) {
+  const covered = new Set([chosen.host, ...(Array.isArray(chosen.health.hosts) ? chosen.health.hosts : [])]);
+  const duplicates = [];
+  for (const entry of owned) {
+    if (entry === chosen || covered.has(entry.host)) continue;
+    duplicates.push(entry);
+    for (const host of Array.isArray(entry.health.hosts) ? entry.health.hosts : [entry.host]) covered.add(host);
+  }
+  return duplicates;
+}
+
+// Duplicates are retired over their own /shutdown, never by process name or port-wide signal, so
+// nothing but an identified Atlas server of this installation is ever stopped.
+async function stopDuplicateServers(duplicates, { reloadKey = "", reason = "" } = {}) {
+  for (const duplicate of duplicates) {
+    await requestShutdown(duplicate.baseUrl, {
+      reloadKey,
+      reason: reason || serverReplacementReason(VERSION, duplicate.health),
+    });
+    await waitForPortFree(duplicate.baseUrl, 3000);
+  }
+}
+
+// Keep the running server, retiring any same-port duplicate first. Only duplicates whose addresses
+// the kept server already requests reach here (`hostsToServe`), and the reconcile afterwards makes
+// it bind an address the duplicate was holding right away, instead of on its next background retry.
+async function adoptServer(baseUrl, duplicates, reloadKey) {
+  if (duplicates.length === 0) return baseUrl;
+  await stopDuplicateServers(duplicates, { reloadKey });
+  const health = await probeHealth(baseUrl, { reconcileNetwork: true, timeoutMs: HEALTH_RECONCILE_TIMEOUT_MS });
+  assertServerOwnership(baseUrl, health);
+  return baseUrl;
+}
+
+// The concrete addresses this CLI's own ATLAS_CORE_HOST needs a server to serve. Without an explicit
+// host any running server will do: loopback is always served, and Tailscale is the server's to
+// detect. A name that does not resolve right now is still required as the name, so the server is
+// asked to serve it, retries it, and reports it as network_warning instead of it being dropped.
+async function requiredServerHosts(env = process.env) {
+  const envHost = env.ATLAS_CORE_HOST?.trim();
+  if (!envHost || isWildcardHost(envHost)) return [];
+  return resolveConcreteListenHosts([clientHost(env)], { keepUnresolved: true });
+}
+
+// Which required addresses a running server was never asked to serve. An address it was asked for
+// but has not bound yet is NOT missing: that server is already retrying it, and a replacement could
+// not bind it either. A server too old to report its requested addresses is judged by version.
+export function missingServerHosts(healthBody, requiredHosts) {
+  if (!healthBody || !Array.isArray(healthBody.requested_hosts)) return [];
+  return requiredHosts.filter((host) => !healthBody.requested_hosts.includes(host));
+}
+
+// Every address the replaced servers were asked to serve, so a replacement - for an upgrade, a
+// changed network, or a missing host - never drops another agent's address and its review links.
+// This CLI's own hosts come from its environment. An address that is no longer on this machine (a
+// Tailscale IP from a network that went away) is left out, so the replacement does not retry it
+// forever; one still on a local interface is kept even when the network around it changed.
+export function inheritedListenHosts(
+  healthBodies,
+  requiredHosts,
+  inherited = [],
+  localAddresses = localInterfaceAddresses(),
+) {
+  const hosts = [...inherited];
+  for (const health of healthBodies) {
+    if (!health || !Array.isArray(health.requested_hosts)) continue;
+    for (const host of health.requested_hosts) {
+      if (host === LOOPBACK_HOST || requiredHosts.includes(host)) continue;
+      if (isIP(host) && !localAddresses.includes(host)) continue;
+      if (!hosts.includes(host)) hosts.push(host);
+    }
+  }
+  return hosts;
+}
+
+// Every address a kept server has to be asked to serve: this CLI's own, and every address a
+// same-port duplicate serves, so retiring that duplicate never takes its review links with it.
+function hostsToServe(requiredHosts, duplicates) {
+  return inheritedListenHosts(
+    duplicates.map((duplicate) => duplicate.health),
+    [],
+    requiredHosts,
+  );
 }
 
 async function probeHealth(baseUrl, { reconcileNetwork, timeoutMs }) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const health = await Promise.race([
-      Promise.resolve()
-        .then(() => fetchHealth(baseUrl, { reconcileNetwork, timeoutMs, signal: controller.signal }))
-        .catch(() => null),
-      new Promise((resolve) => {
-        controller.signal.addEventListener("abort", () => resolve(null), { once: true });
-      }),
-    ]);
-    return health && typeof health === "object" ? health : null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const health = await fetchHealth(baseUrl, { reconcileNetwork, timeoutMs });
+  return health && typeof health === "object" ? health : null;
 }
 
 // `reloadKey` names the session this invocation is about to open. A version-driven replacement
 // reloads that chrome only; every other open review page is told it is outdated and left alone.
 async function ensureServer({ forceRestart = false, reloadKey = "" } = {}) {
   const port = defaultPort();
-  const { baseUrl, health: existing } = await findRunningServer(port, { reconcileNetwork: true });
-  if (existing && !shouldRestartServer(VERSION, existing, forceRestart)) {
-    return baseUrl;
+  const requiredHosts = await requiredServerHosts();
+  const { baseUrl, health: existing, duplicates, foreign } = await findRunningServer(port, { reconcileNetwork: true });
+  if (foreign) throw otherInstallationError(port, foreign);
+  const missingHosts =
+    existing?.app === "atlas-core" ? missingServerHosts(existing, hostsToServe(requiredHosts, duplicates)) : [];
+  if (existing && !shouldRestartServer(VERSION, existing, forceRestart) && missingHosts.length === 0) {
+    return adoptServer(baseUrl, duplicates, reloadKey);
   }
+  let alsoListen = inheritedListenHosts([existing, ...duplicates.map((duplicate) => duplicate.health)], requiredHosts);
+  let unidentified = "";
   if (existing) {
-    if (!(await canControlServerOnPort(port, existing, processOnPortMatchesAtlas))) {
+    if (!(await canControlServerOnPort(baseUrl, existing, listenerMatchesAtlas))) {
       throw new AxiError(`Port ${port} is occupied by a non-Atlas Core server`, "SERVER_ERROR", [
         `Stop the process using port ${port}, or set ATLAS_CORE_PORT to another port`,
       ]);
     }
+    await stopDuplicateServers(duplicates, { reloadKey });
     // Stale server from an older release is squatting on the port. Ask it to shut down
     // gracefully so the upgraded client doesn't keep handing users an old chrome.
     await requestShutdown(baseUrl, { reloadKey, reason: serverReplacementReason(VERSION, existing, forceRestart) });
@@ -1784,12 +1942,12 @@ async function ensureServer({ forceRestart = false, reloadKey = "" } = {}) {
       // so the POST 404'd. Fall back to SIGTERM by PID so the very first upgrade still
       // works, then keep waiting.
       if (shouldKillProcessOnPort(VERSION, existing)) {
-        killProcessOnPort(port);
-        await waitForPortFree(baseUrl, 3000);
+        if (await killAtlasListener(baseUrl)) await waitForPortFree(baseUrl, 3000);
+        else unidentified = baseUrl;
       }
     }
   }
-  await startServer(port);
+  await startServer(port, { alsoListen });
   const replacedForNetwork =
     Boolean(existing) &&
     existing.app === "atlas-core" &&
@@ -1798,24 +1956,68 @@ async function ensureServer({ forceRestart = false, reloadKey = "" } = {}) {
     typeof existing.version === "string" &&
     existing.version === VERSION;
   let networkRestarted = replacedForNetwork;
+  let raceRestarted = false;
   let deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
-    const { baseUrl: liveUrl, health } = await findRunningServer(port, { reconcileNetwork: true });
-    if (health && !shouldRestartServer(VERSION, health)) return liveUrl;
+    const {
+      baseUrl: liveUrl,
+      health,
+      duplicates: liveDuplicates,
+      foreign: liveForeign,
+    } = await findRunningServer(port, { reconcileNetwork: true });
+    if (liveForeign) throw otherInstallationError(port, liveForeign);
+    const liveMissing =
+      health?.app === "atlas-core" ? missingServerHosts(health, hostsToServe(requiredHosts, liveDuplicates)) : [];
+    // Once is the bound: every replacement carries the hosts of the server it replaces, so two CLIs
+    // that each need their own address converge on one server instead of replacing each other.
+    if (health && !shouldRestartServer(VERSION, health)) {
+      if (liveMissing.length === 0) return adoptServer(liveUrl, liveDuplicates, reloadKey);
+      if (raceRestarted) throw missingHostsError(port, liveMissing);
+    }
+    // Another daemon won the port while ours was starting (ours exits when an Atlas server already
+    // owns loopback) - an older release, or one missing an address this CLI needs. Retire it and
+    // start once more rather than wait it out.
+    if (health?.app === "atlas-core" && health.network_stale !== true && !raceRestarted) {
+      raceRestarted = true;
+      alsoListen = inheritedListenHosts(
+        [health, ...liveDuplicates.map((duplicate) => duplicate.health)],
+        requiredHosts,
+        alsoListen,
+      );
+      await stopDuplicateServers(liveDuplicates, { reloadKey });
+      await requestShutdown(liveUrl, { reloadKey, reason: serverReplacementReason(VERSION, health) });
+      if (!(await waitForPortFree(liveUrl, 3000))) break;
+      await startServer(port, { alsoListen });
+      deadline = Date.now() + 5000;
+      continue;
+    }
     if (health?.network_stale === true && health.app === "atlas-core") {
-      if (networkRestarted) return liveUrl;
+      if (networkRestarted) {
+        if (liveMissing.length > 0) throw missingHostsError(port, liveMissing);
+        return adoptServer(liveUrl, liveDuplicates, reloadKey);
+      }
+      alsoListen = inheritedListenHosts([health], requiredHosts, alsoListen);
       await requestShutdown(liveUrl, { reloadKey, reason: "" });
       if (!(await waitForPortFree(liveUrl, 3000))) break;
-      await startServer(port);
+      await startServer(port, { alsoListen });
       networkRestarted = true;
       deadline = Date.now() + 5000;
       continue;
     }
     await delay(100);
   }
+  if (unidentified) throw unidentifiedListenerError(unidentified);
   throw new AxiError("Atlas Core server did not start", "SERVER_ERROR", [
     `Run \`atlas-core server --port ${port}\` to inspect server startup`,
   ]);
+}
+
+function missingHostsError(port, missingHosts) {
+  return new AxiError(
+    `The Atlas server on port ${port} does not serve ${missingHosts.join(", ")}, and replacing it did not stick`,
+    "SERVER_ERROR",
+    ["Run `atlas-core stop`, then retry"],
+  );
 }
 
 // Pure helper so the upgrade-detection logic is unit-testable without spinning up HTTP.
@@ -1858,43 +2060,99 @@ export function shouldKillProcessOnPort(currentVersion, healthBody) {
   return healthBody.version !== currentVersion;
 }
 
-async function canControlServerOnPort(port, healthBody, processMatchesAtlas) {
+// A listener can be replaced between discovery and control. Every new health snapshot
+// must still belong to this state file, including reconciles and last-resort signals.
+function assertServerOwnership(baseUrl, health) {
+  if (health?.app !== "atlas-core") return;
+  const url = new URL(baseUrl);
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  const entry = { host, baseUrl, health };
+  if (!isOwnedServer(entry, new Set([clientHost(), LOOPBACK_HOST]))) {
+    throw otherInstallationError(Number(url.port), entry);
+  }
+}
+
+async function canControlServerOnPort(baseUrl, healthBody, processMatchesAtlas) {
   if (!healthBody || typeof healthBody !== "object") return false;
+  assertServerOwnership(baseUrl, healthBody);
   if (healthBody.app === "atlas-core") return true;
   if (typeof healthBody.version === "string" && healthBody.version !== "") return false;
-  return processMatchesAtlas(port);
+  return processMatchesAtlas(baseUrl);
 }
 
 /**
  * @param {string} baseUrl
- * @param {{ reconcileNetwork?: boolean, timeoutMs?: number, signal?: AbortSignal }} [options]
+ * @param {{ reconcileNetwork?: boolean, timeoutMs?: number }} [options]
  */
-async function fetchHealth(baseUrl, { reconcileNetwork = false, timeoutMs, signal } = {}) {
-  try {
-    const suffix = reconcileNetwork ? "?reconcile_network=1" : "";
-    const abortSignal = signal ?? (timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined);
-    const response = await fetch(`${baseUrl}/health${suffix}`, abortSignal ? { signal: abortSignal } : {});
-    if (!response.ok) return null;
-    return await response.json();
-  } catch {
-    return null;
-  }
+// Plain node:http with the socket destroyed on every exit path, not fetch: an aborted fetch leaves
+// its TCP connect running, and discovery dials every local address - including a Tailscale IPv6
+// address that silently drops connections to itself - so each CLI invocation lingered for the OS
+// connect timeout (~10s) after printing its result.
+function fetchHealth(baseUrl, { reconcileNetwork = false, timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS } = {}) {
+  return new Promise((resolve) => {
+    let settled = false;
+    /** @type {import("node:http").ClientRequest | null} */
+    let request = null;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      request?.destroy();
+      resolve(value);
+    };
+    const abort = () => finish(null);
+    const timer = setTimeout(abort, timeoutMs);
+    try {
+      const url = new URL(`${baseUrl}/health${reconcileNetwork ? "?reconcile_network=1" : ""}`);
+      request = httpGet(url, { agent: false }, (response) => {
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          body += chunk;
+          if (body.length > MAX_HEALTH_BODY_BYTES) finish(null);
+        });
+        response.on("end", () => {
+          if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+            finish(null);
+            return;
+          }
+          try {
+            finish(JSON.parse(body));
+          } catch {
+            finish(null);
+          }
+        });
+        response.on("error", abort);
+      });
+      request.on("error", abort);
+    } catch {
+      abort();
+    }
+  });
 }
 
 // `reason` is what every other open review page is told: this CLI has exactly two callers, and
 // each knows which of them it is.
 async function requestShutdown(baseUrl, { reloadKey = "", reason = "" } = {}) {
+  const health = await fetchHealth(baseUrl);
+  if (!health) return;
+  assertServerOwnership(baseUrl, health);
+  if (!(await canControlServerOnPort(baseUrl, health, listenerMatchesAtlas))) throw unidentifiedListenerError(baseUrl);
   const body = {};
   if (reloadKey) body.reload_key = reloadKey;
   if (reason) body.reason = reason;
-  try {
-    await fetch(`${baseUrl}/shutdown`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+  const response = await fetch(`${baseUrl}/shutdown`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "Atlas-State-Id": stateId() },
+    body: JSON.stringify(body),
+  }).catch(() => null);
+  // The server checks this identity too: a replacement can take the endpoint even
+  // after the last health read, and must refuse a shutdown meant for another state file.
+  if (response?.status === 409) {
+    throw otherInstallationError(Number(new URL(baseUrl).port), {
+      host: new URL(baseUrl).hostname,
+      health: {},
     });
-  } catch {
-    // Best effort. If the server died before answering, the port will free up on its own.
   }
 }
 
@@ -1907,48 +2165,65 @@ async function waitForPortFree(baseUrl, timeoutMs) {
   return false;
 }
 
-// Last-resort fallback for the bootstrap upgrade case: a pre-handshake server is squatting
-// on the port and doesn't expose /shutdown, so we resolve its PID via lsof and SIGTERM it.
-// macOS/Linux only - Windows users would need to kill manually, but atlas-core isn't
-// shipped for Windows today.
-function killProcessOnPort(port) {
+// PIDs listening on exactly this server's address and port whose command is Atlas. Other
+// processes can share the port at other addresses, so nothing is identified by port alone.
+// macOS/Linux only (lsof) - atlas-core isn't shipped for Windows today.
+function atlasListenerPids(baseUrl) {
+  const { hostname, port } = new URL(baseUrl);
   try {
-    const result = spawnSync("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" });
-    if (result.status !== 0) return;
-    for (const line of result.stdout.split("\n")) {
-      const pid = Number(line.trim());
-      if (Number.isInteger(pid) && pid > 0 && pid !== process.pid) {
-        try {
-          process.kill(pid, "SIGTERM");
-        } catch {
-          // Process already gone or permission denied - either way nothing we can do.
-        }
-      }
-    }
-  } catch {
-    // lsof missing or unsupported platform - the outer caller will surface SERVER_ERROR.
-  }
-}
-
-function processOnPortMatchesAtlas(port) {
-  try {
-    const pids = spawnSync("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" });
-    if (pids.status !== 0) return false;
-    for (const line of pids.stdout.split("\n")) {
+    const listing = spawnSync("lsof", ["-t", `-iTCP@${hostname}:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" });
+    if (listing.status !== 0) return [];
+    const pids = [];
+    for (const line of listing.stdout.split("\n")) {
       const pid = Number(line.trim());
       if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
       const command = spawnSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8" });
-      if (command.status === 0 && /atlas-core/.test(command.stdout)) {
-        return true;
-      }
+      if (command.status === 0 && /atlas-core/.test(command.stdout)) pids.push(pid);
     }
+    return pids;
   } catch {
-    return false;
+    return [];
   }
-  return false;
 }
 
-async function startServer(port) {
+function listenerMatchesAtlas(baseUrl) {
+  return atlasListenerPids(baseUrl).length > 0;
+}
+
+// Last-resort fallback for the bootstrap upgrade case: a pre-handshake server is squatting on the
+// port and doesn't expose /shutdown, so its PID is resolved and SIGTERM'd. Reports whether an Atlas
+// process was found to signal.
+async function killAtlasListener(baseUrl) {
+  const pids = atlasListenerPids(baseUrl);
+  const health = await fetchHealth(baseUrl);
+  if (!health) return false;
+  assertServerOwnership(baseUrl, health);
+  const currentPids = atlasListenerPids(baseUrl);
+  // Do not acquire a new occupant after validating the old health response. A
+  // replacement can bind while that response is still arriving on an old socket.
+  if (pids.length === 0 || currentPids.length !== pids.length || !pids.every((pid) => currentPids.includes(pid))) {
+    return false;
+  }
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // Process already gone or permission denied - either way nothing we can do.
+    }
+  }
+  return pids.length > 0;
+}
+
+function unidentifiedListenerError(baseUrl) {
+  const { host } = new URL(baseUrl);
+  return new AxiError(
+    `The server at ${host} did not shut down, and no Atlas process listening there could be identified`,
+    "SERVER_ERROR",
+    [`Stop the process listening on ${host} yourself, or set ATLAS_CORE_PORT to another port`],
+  );
+}
+
+async function startServer(port, { alsoListen = [] } = {}) {
   await ensureStateDir();
   const entry = resolveServerEntry();
   let logFd = null;
@@ -1958,7 +2233,9 @@ async function startServer(port) {
     // If logging cannot be initialized, keep the server behavior unchanged.
   }
   try {
-    const child = spawn(process.execPath, [entry, "server", "--port", String(port)], createServerSpawnOptions(logFd));
+    const args = [entry, "server", "--port", String(port)];
+    for (const host of alsoListen) args.push("--also-listen", host);
+    const child = spawn(process.execPath, args, createServerSpawnOptions(logFd));
     child.unref();
   } finally {
     if (logFd !== null) closeSync(logFd);
@@ -2166,6 +2443,21 @@ function flagValue(args, flag) {
   return null;
 }
 
+function flagValues(args, flag) {
+  const values = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--") break;
+    if (arg === flag && args[i + 1]) {
+      values.push(args[i + 1]);
+      i += 1;
+    } else if (arg.startsWith(`${flag}=`) && arg.length > flag.length + 1) {
+      values.push(arg.slice(flag.length + 1));
+    }
+  }
+  return values;
+}
+
 function inspectValueFlag(args, flag) {
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -2334,7 +2626,7 @@ function createCommandHelp({ agent = "generic" } = {}) {
     design: `Usage: atlas-core design\n\nShow the Atlas Core OLED head snippet (Archivo + IBM Plex Mono fonts and the atlas-core-oled theme, the default for new artifacts), a copy-pasteable CDN snippet for Tailwind CSS browser runtime v4 + DaisyUI v5 + themes, the whiteboard (Mermaid) opt-in snippet, a content-to-playbook router, an optional layout safety CSS snippet, plus technical reference for DaisyUI components. ${PLAYBOOK_ROUTER_HELP} Atlas Core artifacts stay portable HTML. This CDN snippet is the design fallback, not the default: inspect the subject project before falling back, and paste the layout safety CSS only when useful for dense nested grid/flex layouts, badges, wide fonts, or local media. ${DESIGN_PRIORITY_RULE}\n`,
     setup: `Usage: atlas-core setup hooks\n       atlas-core setup plugin\n\nhooks: install or repair agent SessionStart hooks for atlas-core ambient context in Claude Code, Codex, OpenCode, and GitHub Copilot CLI. Restart your agent session afterward to receive the context. This is the primary integration - it carries live session state.\n\nplugin: register the installed atlas-core package as an Agent Plugin (agent-plugins.org) in VS Code, Cursor, and GitHub Copilot CLI. The installed package directory is itself the plugin root, so nothing is downloaded and no marketplace is involved. Reload each client afterward. Codex users should use \`setup hooks\` instead.\n\nBoth actions are explicit opt-in, idempotent, and repair a stale path after a reinstall.\n`,
     update: `Usage: atlas-core update [--check]\n\nAtlas Core itself is installed from a source clone and never updates through an npm registry package; the installer only resolves its normal dependencies there. From the cloned atlas-core repository, run \`git pull --ff-only\` followed by \`npm run install:local\`. The --check and --dry-run forms print the same source-update guidance without changing anything.\n`,
-    server: `Usage: atlas-core server [--port 4397] [--verbose]\n\nRun the local Atlas Core server. Pass --verbose (or set ATLAS_CORE_DEBUG=1) to log session and watcher events to stderr. Detached server output is appended to ~/.atlas-core/server.log, or ATLAS_CORE_STATE_DIR/server.log when set, for startup and crash diagnostics.\n\nBy default Atlas Core binds to 127.0.0.1 and, when Tailscale is running, this machine's Tailscale IPv4. Any explicit ATLAS_CORE_HOST overrides automatic Tailscale binding; wildcard values such as 0.0.0.0 or :: are restricted to loopback. An explicit non-wildcard ATLAS_CORE_HOST sets one bind address; binding beyond loopback exposes an unauthenticated server that can read and serve arbitrary local files to anything that can reach it, so only do so on a trusted network. With automatic binding enabled, a successfully bound Tailscale listener uses its MagicDNS name in generated session links; otherwise ATLAS_CORE_LINK_HOST can set the link hostname. See README's Allowed hosts section for Host allowlisting and ATLAS_CORE_ALLOWED_HOSTS. ATLAS_CORE_NO_OPEN=1 (or --no-open) suppresses the local browser launch.\n`,
+    server: `Usage: atlas-core server [--port 4397] [--verbose] [--also-listen <host>...]\n\nRun the local Atlas Core server. Pass --verbose (or set ATLAS_CORE_DEBUG=1) to log session and watcher events to stderr. Detached server output is appended to ~/.atlas-core/server.log, or ATLAS_CORE_STATE_DIR/server.log when set, for startup and crash diagnostics.\n\nBy default Atlas Core binds to 127.0.0.1 and, when Tailscale is running, this machine's Tailscale IPv4. Any explicit ATLAS_CORE_HOST overrides automatic Tailscale binding; wildcard values such as 0.0.0.0 or :: are restricted to loopback. An explicit non-wildcard ATLAS_CORE_HOST sets the bind address, and the server also listens on 127.0.0.1 so every local CLI finds it; --also-listen adds further concrete addresses (the CLI passes it when it replaces a server, to keep every address the old one served). An address that cannot be bound is retried in the background and reported as network_warning. Binding beyond loopback exposes an unauthenticated server that can read and serve arbitrary local files to anything that can reach it, so only do so on a trusted network. With automatic binding enabled, a successfully bound Tailscale listener uses its MagicDNS name in generated session links; otherwise ATLAS_CORE_LINK_HOST can set the link hostname. See README's Allowed hosts section for Host allowlisting and ATLAS_CORE_ALLOWED_HOSTS. ATLAS_CORE_NO_OPEN=1 (or --no-open) suppresses the local browser launch.\n`,
   };
 }
 
