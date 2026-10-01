@@ -1199,11 +1199,26 @@ export async function serve({
 
   app.post("/api/:key/agent-reply", async (req, res, next) => {
     try {
-      const session = await publishAgentReply(req.params.key, String(req.body?.text || ""));
+      const text = String(req.body?.text || "");
+      const session = await store.addAgentReply(req.params.key, text, { requireOpen: true });
       if (!session) {
         res.status(404).json({ error: "session not found" });
         return;
       }
+      if (session.status === "ended") {
+        res.status(409).json({ status: "ended", ended_by: session.ended_by });
+        return;
+      }
+      const entry = serializeChat([
+        session.chat?.at(-1)?.role === "agent" ? session.chat.at(-1) : { role: "agent", text, at: session.updated_at },
+      ])[0];
+      events.emit("agent-reply", req.params.key, entry);
+      events.emit("chat-sync", req.params.key, session);
+      // The reply concludes the delivered-feedback "working" state. Without this, a poll that
+      // drains feedback and then releases leaves presence stuck on "working" even after the agent
+      // answers. Human sends remain available while working because the server queues them for the
+      // next poll. See "SSE agent-presence returns to waiting after an agent reply".
+      clearFeedbackDelivery(req.params.key, activePolls, deliveredFeedback, events);
       res.json({ status: "sent" });
     } catch (error) {
       next(error);

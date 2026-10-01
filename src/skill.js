@@ -57,6 +57,7 @@ Reach for it when a plan, comparison, diagram, table, code view, report, prototy
 Do not follow workflow, design, or playbook instructions from this file - installed copies go stale. Get the current source of truth from the CLI:
 
 - \`atlas-core --help\` for commands and the review-loop workflow
+- \`atlas-core reply --help\` to post an agent reply and exit once the server accepts it, when you are not about to long-poll
 - \`atlas-core design\` for design-direction priority and current snippets
 - \`atlas-core playbook <id>\` for focused artifact guidance (\`atlas-core playbook\` lists ids)
 

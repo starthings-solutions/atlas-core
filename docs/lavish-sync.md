@@ -1,6 +1,6 @@
 # Lavish sync log
 
-last-verified: 40cafa206916cf21e4996158c347e58364d01559
+last-verified: a2a199cd2275ab4d5cea1b94d42e2479bda36321
 
 ## 2026-09-19 — c5bdea4, c69a512, 20159e0
 
@@ -35,3 +35,8 @@ last-verified: 40cafa206916cf21e4996158c347e58364d01559
 - `f4ed5ff` feat: add standalone answer copying to input playbook (#377) — pulado: playbook guidance-text feature (opt-in artifact-author snippet + README bullet), no Atlas runtime behavior change; could be added natively later with `data-atlas-*` names
 - `3d26e6b` docs: trim agent guidance and relocate implementation invariants (#380) — pulado: docs-only (AGENTS.md restructure, which Atlas owns itself) plus a one-line comment pointer to `docs/invariants.md`, a file that does not exist here
 - `40cafa2` chore(main): release lavish-axi 0.1.79 (#378) — pulado: release-please (`CHANGELOG.md`, version bump), never portable
+
+## 2026-10-01 — ae66e1a..a2a199c (2 commits)
+
+- `ae66e1a` feat(cli): add a reply command with server acceptance receipt (#392) — portado em `d7aea2e`: new `atlas-core reply` command (receipt via `postAgentReply`, 10s `AGENT_REPLY_RECEIPT_TIMEOUT_MS`, `SESSION_ENDED` on 409), `POST /api/:key/agent-reply` 409s ended sessions (`addAgentReply` `requireOpen`), reply/poll help + home/open/feedback guidance, skill pointer, README rows, `test/cli-reply.test.js`. ADAPTAÇÕES after rebase onto merged PRs #1–#4: (1) `poll --agent-reply` uses the atomic `POST /api/poll` claim from PR #2 (`publishAgentReply`) rather than a pre-poll `postPollAgentReply` to the receipt endpoint; (2) `board` → `review page` in CLI strings; (3) presence modes from PR #2 are present; (4) the `docs/invariants.md` hunk was folded into the matching `AGENTS.md` line (that file does not exist here); the README skill-stub sentence hunk had no Atlas counterpart and was skipped.
+- `a2a199c` chore(main): release lavish-axi 0.1.80 (#393) — pulado: release-please (`CHANGELOG.md`, version bump), never portable
