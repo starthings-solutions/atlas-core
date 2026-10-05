@@ -44,6 +44,9 @@ function createElement(tag) {
         .split(",")
         .some((part) => {
           const selector = part.trim();
+          if (selector === "a[href]") return element.tagName === "A" && attributes.has("href");
+          const attributeValue = selector.match(/^\[([a-z-]+)='([^']*)'\]$/i);
+          if (attributeValue) return attributes.get(attributeValue[1]) === attributeValue[2];
           if (selector.startsWith("[")) return attributes.has(selector.slice(1, selector.indexOf("]")).split("=")[0]);
           return selector === element.tagName.toLowerCase();
         });
@@ -55,6 +58,14 @@ function createElement(tag) {
         current = current.parentElement;
       }
       return null;
+    },
+    contains(other) {
+      let current = other;
+      while (current) {
+        if (current === element) return true;
+        current = current.parentElement;
+      }
+      return false;
     },
     appendChild(child) {
       child.parentElement = element;
@@ -186,7 +197,19 @@ function bootSdk({ runAnimationFrames = false } = {}) {
     click(target) {
       const listener = documentListeners.find((entry) => entry.type === "click");
       assert.ok(listener, "the SDK registers a document click listener");
-      listener.handler({ target, preventDefault() {}, stopPropagation() {} });
+      const event = {
+        target,
+        defaultPrevented: false,
+        propagationStopped: false,
+        preventDefault() {
+          this.defaultPrevented = true;
+        },
+        stopPropagation() {
+          this.propagationStopped = true;
+        },
+      };
+      listener.handler(event);
+      return event;
     },
     setDocumentQuery(query) {
       documentQuery = query;
@@ -534,4 +557,78 @@ test("the served SDK bundle drops a late restore once the user has opened a card
     sdk.posted.some((message) => message.type === "atlas:reviewDraftUnrestorable"),
     false,
   );
+});
+
+test("the served SDK lets ARIA widget clicks reach the artifact without an annotation card", () => {
+  for (const role of [
+    "button",
+    "checkbox",
+    "combobox",
+    "menuitem",
+    "menuitemcheckbox",
+    "menuitemradio",
+    "option",
+    "radio",
+    "switch",
+    "tab",
+    "treeitem",
+  ]) {
+    const sdk = bootSdk();
+    const widget = appendTo(sdk.body, createElement("div"));
+    widget.setAttribute("role", role);
+    const label = appendTo(widget, cell("span", "Choose this"));
+
+    for (const target of [widget, label]) {
+      const event = sdk.click(target);
+      assert.equal(event.defaultPrevented, false, role);
+      assert.equal(event.propagationStopped, false, role);
+      assert.equal(sdk.cards().length, 0, role);
+    }
+  }
+});
+
+test("the served SDK annotates links with a widget role instead of navigating", () => {
+  const sdk = bootSdk();
+  const link = appendTo(sdk.body, createElement("a"));
+  link.setAttribute("href", "#details");
+  link.setAttribute("role", "menuitem");
+  const label = appendTo(link, cell("span", "Details"));
+
+  const event = sdk.click(label);
+
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(event.propagationStopped, true);
+  assert.equal(sdk.cards().length, 1);
+});
+
+test("the served SDK annotates links inside a widget while letting sibling controls work", () => {
+  const sdk = bootSdk();
+  const widget = appendTo(sdk.body, createElement("div"));
+  widget.setAttribute("role", "tab");
+  const link = appendTo(widget, createElement("a"));
+  link.setAttribute("href", "#details");
+  const label = appendTo(link, cell("span", "Details"));
+  const sibling = appendTo(widget, cell("span", "Select tab"));
+
+  assert.equal(sdk.click(sibling).defaultPrevented, false);
+  assert.equal(sdk.cards().length, 0);
+  assert.equal(sdk.click(label).defaultPrevented, true);
+  assert.equal(sdk.cards().length, 1);
+});
+
+test("the served SDK prevents navigation through a nested widget in a link inside an outer widget", () => {
+  const sdk = bootSdk();
+  const outer = appendTo(sdk.body, createElement("div"));
+  outer.setAttribute("role", "menuitem");
+  const link = appendTo(outer, createElement("a"));
+  link.setAttribute("href", "#details");
+  const inner = appendTo(link, createElement("span"));
+  inner.setAttribute("role", "button");
+  const label = appendTo(inner, cell("span", "Details"));
+
+  const event = sdk.click(label);
+
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(event.propagationStopped, true);
+  assert.equal(sdk.cards().length, 1);
 });

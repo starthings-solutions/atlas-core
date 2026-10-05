@@ -1,6 +1,6 @@
 # Lavish sync log
 
-last-verified: a2a199cd2275ab4d5cea1b94d42e2479bda36321
+last-verified: 95cf540166d3d8a00e65ea9cd8bbd455016b028b
 
 ## 2026-09-19 — c5bdea4, c69a512, 20159e0
 
@@ -52,3 +52,12 @@ last-verified: a2a199cd2275ab4d5cea1b94d42e2479bda36321
 - A auditoria original continua preservada em `docs/lavish-engine-audit-2026-10-01.md`; a resolução e a validação deste porte estão registradas ao final dela.
 
 - Validação final: check completo aprovado (1.375 testes, zero falhas, nove opcionais não executados; skill/plugin atualizados) e revisão independente aprovada.
+
+## 2026-10-05 — a2a199c..95cf540 (4 commits)
+
+- `5f0be78` feat(chrome): edit queued annotations in place (#394) — pulado: nova superfície de UI no chrome (editor de notas enfileiradas, controles/CSS e protocolo SDK de abertura do editor), seguindo o precedente de `b4e82c6`; as correções de seleção e preservação de rascunho deste commit pertencem ao editor novo, ausente no Atlas.
+- `7369205` chore(main): release lavish-axi 0.1.81 (#395) — pulado: release-please (`CHANGELOG.md`, `.release-please-manifest.json`, versões de `package.json` e `plugin.json`), nunca portável.
+- `2ca57dd` fix(sdk): let interactive ARIA widgets pass through annotation (#397) — portado: widgets com roles ARIA interativos e seus descendentes deixam passar cliques em modo de anotação, enquanto links `<a href>` com esses roles ou dentro dos widgets continuam anotáveis; cursor correspondente, README, playbook input e invariante em `AGENTS.md` atualizados. Adaptado: nomes `atlas`/`data-atlas-*`, cor OLED `#6fc7c2` e offset de 3px preservados; `docs/invariants.md` upstream mapeado ao proprietário local `AGENTS.md`. Regressões unitárias e do bundle servido cobrem os roles, links e propagação de cliques. Endurecimento local após revisão: links dentro de um widget externo continuam anotáveis mesmo quando contêm um widget interno (lacuna herdada do upstream); widget isolado dentro de link mantém o comportamento upstream.
+- `95cf540` chore(main): release lavish-axi 0.1.82 (#398) — pulado: release-please (`CHANGELOG.md`, `.release-please-manifest.json`, versões de `package.json` e `plugin.json`), nunca portável.
+
+- Validação: `npm run check` completo aprovado (1.385 testes aprovados, zero falhas, nove opcionais pulados; skill/plugin atualizados), com afinidade de uma CPU para serializar `node:test`. A execução paralela excedeu o limite de 1s no teste preexistente `malformed links and images stay literal without stalling`; execução isolada e check serializado aprovados sem alterar esse teste ou o renderer. Revisão independente aprovada após o endurecimento de links aninhados.
