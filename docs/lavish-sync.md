@@ -61,3 +61,9 @@ last-verified: 95cf540166d3d8a00e65ea9cd8bbd455016b028b
 - `95cf540` chore(main): release lavish-axi 0.1.82 (#398) — pulado: release-please (`CHANGELOG.md`, `.release-please-manifest.json`, versões de `package.json` e `plugin.json`), nunca portável.
 
 - Validação: `npm run check` completo aprovado (1.385 testes aprovados, zero falhas, nove opcionais pulados; skill/plugin atualizados), com afinidade de uma CPU para serializar `node:test`. A execução paralela excedeu o limite de 1s no teste preexistente `malformed links and images stay literal without stalling`; execução isolada e check serializado aprovados sem alterar esse teste ou o renderer. Revisão independente aprovada após o endurecimento de links aninhados.
+
+## 2026-10-09 — sync seletivo de ca8ca78 (#406)
+
+- `ca8ca78` fix(server): constrain sessions and assets to HTML artifact trees (#406) — portado via `cherry-pick -x`: `POST /api/sessions` recusa caminhos que não sejam arquivo `.html`/`.htm` regular após `realpath` (novo `src/artifact-path.js`, `isHtmlPath` compartilhado com a CLI); `/artifact/:key/<path>` serve só a árvore do diretório do HTML; sessões antigas não-HTML em `state.json` são recusadas em `/artifact`, `/session/:key`, export, share e mermaid-sources. Adaptado: hunk de `docs/invariants.md` mapeado ao proprietário local `AGENTS.md` (`.lavish/` → `.atlas/`); prefixos de temp dir `lavish-*` → `atlas-*` nos testes.
+- Seletivo: `8c12ff2` (#399), `cd202ac` (#400) e releases `6474c6a`/`8039751` não avaliados neste sync; `last-verified` permanece `95cf540`.
+- Versão: `package.json`/`plugin.json` 0.1.72 → 0.1.82, alinhada à última base Lavish integralmente verificada (0.1.82) mais este porte; 0.1.84 não foi usado porque implicaria #399/#400, ausentes.
