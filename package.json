@@ -1,6 +1,6 @@
 {
   "name": "atlas-core",
-  "version": "0.1.72",
+  "version": "0.1.82",
   "packageManager": "pnpm@11.1.1",
   "description": "Local-first HTML artifact review and collaboration for AI agents.",
   "private": true,
