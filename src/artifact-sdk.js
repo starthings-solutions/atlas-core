@@ -2246,6 +2246,11 @@ export function createArtifactSdk(
     scheduleReviewStateReport();
   }
 
+  // Apple platforms use Cmd where others use Ctrl, both for shortcut hints and link-follow clicks.
+  function isApplePlatform() {
+    return /Mac|iP(hone|ad|od)/.test(navigator.platform);
+  }
+
   function showAnnotationCard(target, options = {}) {
     cancelPendingDraftRestore();
     const root = ensureShadow();
@@ -2291,7 +2296,7 @@ export function createArtifactSdk(
           : c.tag === "mermaid-node"
             ? "Tell the agent what to change about this diagram node..."
             : "Tell the agent what to change about this element...";
-    const sendNowHint = /Mac|iP(hone|ad|od)/.test(navigator.platform) ? "⌘" : "Ctrl";
+    const sendNowHint = isApplePlatform() ? "⌘" : "Ctrl";
     card.innerHTML =
       '<div class="atlas-heading">' +
       heading +
@@ -2594,6 +2599,16 @@ export function createArtifactSdk(
         isInteractiveControl(event.target)
       )
         return;
+      // Cmd-click (macOS) or Ctrl-click (elsewhere) on a link follows it (the browser opens a new
+      // tab) instead of annotating, so links stay usable without leaving annotate mode. Meta off
+      // macOS is the Super/Windows key, not a follow gesture, so it annotates like a plain click.
+      // Checked before the queued-note branch so the modifier always wins, and it clears a pending
+      // text-selection swallow so the next plain click is not eaten.
+      const followModifier = isApplePlatform() ? event.metaKey : event.ctrlKey;
+      if (followModifier && /** @type {Element} */ (event.target)?.closest?.("a[href]")) {
+        ignoreNextClick = false;
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       if (ignoreNextClick) {

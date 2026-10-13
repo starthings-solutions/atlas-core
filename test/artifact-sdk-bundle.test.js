@@ -115,7 +115,7 @@ function cell(tag, text) {
   return element;
 }
 
-function bootSdk({ runAnimationFrames = false } = {}) {
+function bootSdk({ runAnimationFrames = false, platform = "Linux" } = {}) {
   const posted = [];
   const documentListeners = [];
   // Deferred work the SDK schedules, run only when a test asks for it: the draft-anchor settle
@@ -135,7 +135,7 @@ function bootSdk({ runAnimationFrames = false } = {}) {
 
   const sandbox = {
     parent: { postMessage: (message) => posted.push(message) },
-    navigator: { platform: "Linux" },
+    navigator: { platform },
     CSS: { escape: (value) => String(value) },
     Element: class Element {},
     MutationObserver: class MutationObserver {
@@ -194,11 +194,14 @@ function bootSdk({ runAnimationFrames = false } = {}) {
     posted,
     body,
     api: sandbox.window.atlas,
-    click(target) {
+    click(target, modifiers = {}) {
       const listener = documentListeners.find((entry) => entry.type === "click");
       assert.ok(listener, "the SDK registers a document click listener");
       const event = {
         target,
+        ctrlKey: false,
+        metaKey: false,
+        ...modifiers,
         defaultPrevented: false,
         propagationStopped: false,
         preventDefault() {
@@ -631,4 +634,68 @@ test("the served SDK prevents navigation through a nested widget in a link insid
   assert.equal(event.defaultPrevented, true);
   assert.equal(event.propagationStopped, true);
   assert.equal(sdk.cards().length, 1);
+});
+
+// In annotate mode a plain click on a link annotates it, so Ctrl-click (Cmd-click on macOS) is the
+// way to follow the link without leaving annotate mode: the SDK steps aside and the browser opens it.
+function buildLink(sdk) {
+  const link = appendTo(sdk.body, cell("a", "Read the spec"));
+  link.setAttribute("href", "https://example.com/spec");
+  const inner = appendTo(link, cell("span", "spec"));
+  return { link, inner };
+}
+
+// The follow modifier is the platform's own: Cmd on macOS, Ctrl elsewhere. Meta on Linux/Windows
+// is the Super/Windows key, which is not a link-follow gesture there, so it annotates like a plain click.
+for (const [platform, modifier] of [
+  ["MacIntel", "metaKey"],
+  ["Linux x86_64", "ctrlKey"],
+  ["Win32", "ctrlKey"],
+]) {
+  test(`${modifier}-click on a link on ${platform} follows the link instead of annotating`, () => {
+    const sdk = bootSdk({ platform });
+    const { link, inner } = buildLink(sdk);
+
+    for (const target of [link, inner]) {
+      const event = sdk.click(target, { [modifier]: true });
+      assert.equal(event.defaultPrevented, false, "the browser's own link handling runs");
+    }
+    assert.equal(sdk.cards().length, 0);
+  });
+}
+
+for (const [platform, modifier] of [
+  ["Linux x86_64", "metaKey"],
+  ["Win32", "metaKey"],
+  ["MacIntel", "ctrlKey"],
+]) {
+  test(`${modifier}-click on a link on ${platform} annotates like a plain click`, () => {
+    const sdk = bootSdk({ platform });
+    const { link } = buildLink(sdk);
+
+    const event = sdk.click(link, { [modifier]: true });
+
+    assert.equal(event.defaultPrevented, true, "the SDK keeps the frame from navigating");
+    assert.match(sdk.card().innerHTML, /Annotate &lt;a&gt;/);
+  });
+}
+
+test("a plain click on a link in annotate mode still opens an annotation card", () => {
+  const sdk = bootSdk();
+  const { link } = buildLink(sdk);
+
+  const event = sdk.click(link);
+
+  assert.equal(event.defaultPrevented, true);
+  assert.match(sdk.card().innerHTML, /Annotate &lt;a&gt;/);
+});
+
+test("a modified click on something that is not a link still annotates", () => {
+  const sdk = bootSdk();
+  const paragraph = appendTo(sdk.body, cell("p", "Just prose"));
+
+  const event = sdk.click(paragraph, { ctrlKey: true });
+
+  assert.equal(event.defaultPrevented, true);
+  assert.match(sdk.card().innerHTML, /Annotate &lt;p&gt;/);
 });
