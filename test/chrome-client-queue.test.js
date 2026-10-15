@@ -8316,3 +8316,31 @@ test("a reconnect does not retire the banner a server replacement raised", async
   assert.equal(banner.hidden, false);
   assert.match(chrome.element("outdatedText").textContent, /Atlas Core was updated/);
 });
+
+test("the Enter that confirms an IME conversion in WebKit does not send the chat composer", async () => {
+  const calls = [];
+  const chrome = await createChromeHarness({
+    fetchImpl: async (url) => {
+      calls.push(url);
+      return { ok: true, json: async () => ({}) };
+    },
+  });
+  chrome.element("chatInput").value = "henkan";
+  const event = {
+    key: "Enter",
+    shiftKey: false,
+    isComposing: false,
+    keyCode: 229,
+    defaultPrevented: false,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+  };
+  chrome.element("chatInput").dispatch("keydown", event);
+  await flushPromises();
+
+  assert.equal(event.defaultPrevented, false);
+  assert.equal(chrome.element("chatInput").value, "henkan");
+  assert.equal(chrome.queued().length, 0);
+  assert.equal(calls.filter((url) => String(url).endsWith("/prompts")).length, 0);
+});
